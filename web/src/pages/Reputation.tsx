@@ -61,7 +61,8 @@ function Body({ vaultId, data }: { vaultId: string; data: VaultData }) {
           <p className="text-center text-[13px] text-fog">Level: {status.tier}</p>
           <p className="mt-4 text-[13px] text-fog">
             Under 20 is probation: every payment waits for the owner. From 20 the agent gets its score as a percentage of the
-            owner's limits, so at {status.score} it can send {near(status.agent_max_per_payment)} per payment.
+            owner's limits, so at {status.score} it can send {near(status.agent_max_per_payment)} per payment
+            {status.frozen ? " once the vault is unfrozen" : ""}.
           </p>
         </Panel>
 

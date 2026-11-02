@@ -123,12 +123,8 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
 
   return (
     <div className="flex min-h-screen">
-      <aside
-        className={cx(
-          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-edge bg-panel/70 lg:flex",
-          collapsed ? "w-[68px]" : "w-[252px]",
-        )}
-      >
+      <div className={cx("hidden shrink-0 border-r border-edge bg-panel/70 lg:block", collapsed ? "w-[68px]" : "w-[252px]")}>
+      <aside className="sticky top-0 flex h-screen flex-col">
         <Brand collapsed={collapsed} />
         <NavLinks route={route} collapsed={collapsed} />
         <div className="space-y-0.5 border-t border-edge p-2">
@@ -158,6 +154,7 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
           </button>
         </div>
       </aside>
+      </div>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onMouseDown={() => setMobileOpen(false)}>
@@ -271,8 +268,20 @@ interface SearchHit {
   href: string;
 }
 
+function useWide(query = "(min-width: 640px)"): boolean {
+  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setWide(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [query]);
+  return wide;
+}
+
 function GlobalSearch() {
   const { snapshots } = useVaults();
+  const wide = useWide();
   const [text, setText] = useState("");
   const { open, setOpen, ref } = usePopover();
 
@@ -335,7 +344,7 @@ function GlobalSearch() {
               setOpen(false);
             }
           }}
-          placeholder="Search agents, accounts, events"
+          placeholder={wide ? "Search agents, accounts, events" : "Search"}
           className="h-9 w-full rounded-lg border border-edge bg-raised pl-9 pr-3 text-sm text-snow placeholder:text-fog/80 focus:border-water/60 focus:outline-none"
         />
       </label>
@@ -485,7 +494,7 @@ function AccountMenu() {
   const { open, setOpen, ref } = usePopover();
   if (!signedAccountId) {
     return (
-      <Button variant="primary" size="sm" disabled={loading} onClick={() => void signIn()}>
+      <Button variant="primary" size="sm" disabled={loading} onClick={() => void signIn()} aria-label="Connect wallet">
         <Wallet size={15} />
         <span className="hidden sm:inline">Connect wallet</span>
       </Button>

@@ -41,9 +41,14 @@ function Body({ vaultId, data }: { vaultId: string; data: VaultData }) {
               max={policy.max_requests_per_day}
             />
           </div>
+          {status.frozen && (
+            <p className="mt-5 rounded-lg border border-ice/25 bg-ice/10 px-3 py-2 text-[13px] text-ice">
+              Frozen: the agent can't send anything. These limits apply again once the owner unfreezes the vault.
+            </p>
+          )}
           <dl className="mt-5">
-            <Field label="Per payment now" value={near(status.agent_max_per_payment)} mono />
-            <Field label="Per day now" value={near(status.agent_daily_limit)} mono />
+            <Field label={status.frozen ? "Per payment" : "Per payment now"} value={near(status.agent_max_per_payment)} mono />
+            <Field label={status.frozen ? "Per day" : "Per day now"} value={near(status.agent_daily_limit)} mono />
             <Field label="Score" value={`${status.score} of 100 (${status.tier})`} />
           </dl>
         </Panel>

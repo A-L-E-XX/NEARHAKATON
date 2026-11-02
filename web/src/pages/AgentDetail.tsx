@@ -5,7 +5,7 @@ import { ONE_YOCTO, OwnerAction } from "../components/OwnerAction";
 import { TxTable } from "../components/TxTable";
 import { Badge, Button, ErrorNote, Field, Loading, Panel, agentName } from "../components/ui";
 import { EXPLORER, NETWORK_LABEL } from "../config";
-import { agentState, keyCheck, lastAgentActivity, transactionsFor } from "../lib/derive";
+import { actorOf, agentState, keyCheck, lastAgentActivity, transactionsFor } from "../lib/derive";
 import { ago, near, shortKey } from "../lib/format";
 import { useVaults } from "../lib/store";
 import type { VaultData } from "../lib/vault";
@@ -59,7 +59,7 @@ function Detail({ vaultId, data }: { vaultId: string; data: VaultData }) {
   const key = keyCheck(vaultId, data.agentKeys);
   const last = lastAgentActivity(data);
   const txs = transactionsFor(vaultId, data);
-  const incidents = status.stats.drills_failed + data.activity.filter((e) => e.kind === "Frozen" && /itself/i.test(e.message)).length;
+  const incidents = status.stats.drills_failed + data.activity.filter((e) => e.kind === "Frozen" && actorOf(e) === "Vault").length;
 
   return (
     <>
@@ -126,9 +126,14 @@ function Detail({ vaultId, data }: { vaultId: string; data: VaultData }) {
             <p className="mt-3 text-center text-[13px] text-fog">
               Score <span className="tabular text-[18px] font-semibold text-snow">{status.score}</span> of 100, level {status.tier}
             </p>
+            {status.frozen && (
+              <p className="mt-4 rounded-lg border border-ice/25 bg-ice/10 px-3 py-2 text-[13px] text-ice">
+                Frozen: the agent can't send anything. These limits apply again once the owner unfreezes the vault.
+              </p>
+            )}
             <dl className="mt-4">
-              <Field label="Per payment now" value={near(status.agent_max_per_payment)} mono />
-              <Field label="Per day now" value={near(status.agent_daily_limit)} mono />
+              <Field label={status.frozen ? "Per payment" : "Per payment now"} value={near(status.agent_max_per_payment)} mono />
+              <Field label={status.frozen ? "Per day" : "Per day now"} value={near(status.agent_daily_limit)} mono />
               <Field label="Sent today" value={near(status.spent_today)} mono />
               <Field label="In the vault" value={near(status.available_balance)} mono />
             </dl>
@@ -207,20 +212,21 @@ function Detail({ vaultId, data }: { vaultId: string; data: VaultData }) {
               </ul>
             )}
           </Panel>
-
-          <Panel
-            title="Transaction history"
-            action={
-              <a href="#/transactions" className="text-[13px] text-water hover:underline">
-                Open the monitor
-              </a>
-            }
-            bodyClassName="px-0 pb-0 pt-3"
-          >
-            <TxTable txs={txs.slice(0, 12)} ownerOf={() => status.owner_id} showAgent={false} emptyText="No payments yet." />
-          </Panel>
         </div>
       </div>
+
+      <Panel
+        className="mt-5"
+        title="Transaction history"
+        action={
+          <a href="#/transactions" className="text-[13px] text-water hover:underline">
+            Open the monitor
+          </a>
+        }
+        bodyClassName="pt-3"
+      >
+        <TxTable txs={txs.slice(0, 12)} ownerOf={() => status.owner_id} showAgent={false} emptyText="No payments yet." />
+      </Panel>
     </>
   );
 }

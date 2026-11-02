@@ -103,20 +103,20 @@ export function Threats() {
                 <button
                   type="button"
                   onClick={() => setOpenKey(threat.key)}
-                  className="grid w-full grid-cols-[5.5rem_minmax(0,1fr)] gap-x-4 gap-y-1 border-b border-edge px-5 py-3.5 text-left text-[13px] last:border-0 hover:bg-white/[0.03] md:grid-cols-[5.5rem_minmax(0,1.6fr)_minmax(0,1fr)_7rem]"
+                  className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1.5 border-b border-edge px-5 py-3.5 text-left text-[13px] last:border-0 hover:bg-white/[0.03] md:grid-cols-[5.5rem_minmax(0,1.6fr)_minmax(0,1fr)_7rem]"
                 >
-                  <span>
+                  <span className="order-1 md:order-none">
                     <Badge tone={SEVERITY_TONE[threat.severity]}>{LABEL[threat.severity]}</Badge>
                   </span>
-                  <span className="min-w-0">
+                  <span className="order-3 col-span-2 min-w-0 md:order-none md:col-span-1">
                     <span className="block font-semibold text-snow">{threat.title}</span>
                     <span className="block truncate text-fog">{threat.category}</span>
                   </span>
-                  <span className="col-start-2 min-w-0 truncate text-mist md:col-start-auto">
+                  <span className="order-4 col-span-2 min-w-0 truncate text-mist md:order-none md:col-span-1">
                     {agentName(threat.vaultId)}
                     {threat.account ? <span className="text-fog">, {threat.account}</span> : null}
                   </span>
-                  <span className="col-start-2 text-fog md:col-start-auto md:text-right">{threat.at ? ago(threat.at) : "Now"}</span>
+                  <span className="order-2 text-right text-fog md:order-none">{threat.at ? ago(threat.at) : "Ongoing"}</span>
                 </button>
               </li>
             ))}
@@ -234,25 +234,25 @@ function DrillsPanel({ loaded }: { loaded: Loaded[] }) {
           {drills.slice(0, 8).map((drill) => (
             <li
               key={`${drill.vaultId}:${drill.id}`}
-              className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-4 gap-y-1 border-b border-edge px-5 py-3 text-[13px] last:border-0 md:grid-cols-[5.5rem_minmax(0,1.4fr)_minmax(0,1.2fr)_7rem]"
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1.5 border-b border-edge px-5 py-3 text-[13px] last:border-0 md:grid-cols-[5.5rem_minmax(0,1.4fr)_minmax(0,1.2fr)_7rem]"
             >
-              <span>
+              <span className="order-1 md:order-none">
                 <Badge tone={drill.status === "Reported" ? "secure" : drill.status === "Failed" ? "danger" : "caution"}>
                   {drill.status === "Reported" ? "Passed" : drill.status}
                 </Badge>
               </span>
-              <span className="min-w-0">
+              <span className="order-3 col-span-2 min-w-0 md:order-none md:col-span-1">
                 <span className="block font-semibold text-snow">{drill.lure}</span>
                 <span className="block text-fog">{agentName(drill.vaultId)}</span>
               </span>
-              <span className="col-start-2 min-w-0 truncate text-mist md:col-start-auto">
+              <span className="order-4 col-span-2 min-w-0 truncate text-mist md:order-none md:col-span-1">
                 {drill.status === "Reported"
                   ? `Reported ${drill.decoy_id ?? "the decoy"}`
                   : drill.status === "Failed"
                     ? `Tried to pay ${drill.decoy_id ?? "the decoy"}`
                     : "Not reported in time"}
               </span>
-              <span className="col-start-2 text-fog md:col-start-auto md:text-right">{ago(drill.started_at_ms)}</span>
+              <span className="order-2 text-right text-fog md:order-none">{ago(drill.started_at_ms)}</span>
             </li>
           ))}
         </ul>

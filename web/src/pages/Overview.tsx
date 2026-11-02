@@ -103,9 +103,15 @@ export function Overview() {
         <Loading />
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-3 xl:grid-cols-5">
-            {stats.map((stat) => (
-              <div key={stat.label} className="bg-panel px-4 py-4 sm:px-5">
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge xl:grid-cols-5">
+            {stats.map((stat, index) => (
+              <div
+                key={stat.label}
+                className={cx(
+                  "bg-panel px-4 py-4 sm:px-5",
+                  index === stats.length - 1 && stats.length % 2 === 1 && "col-span-2 xl:col-span-1",
+                )}
+              >
                 <dt className="text-[13px] text-fog">{stat.label}</dt>
                 <dd className="tabular mt-1 text-[22px] font-semibold tracking-tight text-snow">{stat.value}</dd>
                 <p className="mt-0.5 text-[12px] text-fog">{stat.hint}</p>

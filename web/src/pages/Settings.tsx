@@ -46,7 +46,7 @@ export function Settings() {
     <>
       <PageHeader title="Settings" description="Choose which vaults this dashboard watches. These settings stay in this browser." />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Panel title="Watched vaults" description="Any Phishbowl vault on NEAR testnet. Watching is read-only and needs no wallet.">
           {watched.length === 0 ? (
             <p className="mb-4 text-[13px] text-fog">No vaults yet. Add one below.</p>
@@ -172,7 +172,7 @@ export function Settings() {
               Phishbowl itself keeps three things in this browser: the vaults you watch, which alerts you've read, and whether
               the sidebar is collapsed. Your wallet session is kept by NEAR Connect and your wallet, not by Phishbowl.
             </p>
-            <Button className="mt-4" size="sm" variant="ghost" onClick={clearBrowser}>
+            <Button className="mt-4" size="sm" onClick={clearBrowser}>
               Clear saved settings
             </Button>
           </Panel>

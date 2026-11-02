@@ -79,6 +79,7 @@ export function Agents() {
                     <span className="tabular text-mist">
                       <span className="text-fog lg:hidden">Per payment: </span>
                       {near(data.status.agent_max_per_payment)}
+                      {data.status.frozen && <span className="block text-[12px] text-ice">On hold while frozen</span>}
                     </span>
                     <span className="min-w-0">
                       <span className="tabular mb-1 block text-mist">
