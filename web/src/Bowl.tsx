@@ -79,11 +79,13 @@ export function Bowl({ score, frozen, activeDrills, size = 300 }: BowlProps) {
           {frozen && (
             <g>
               <rect x="0" y={waterTop - 3} width="240" height="7" fill="#F4FBFF" />
-              <g stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.9">
-                <Flake x={78} y={waterTop + 32} r={9} />
-                <Flake x={150} y={waterTop + 52} r={7} />
-                <Flake x={116} y={waterTop + 78} r={6} />
-              </g>
+              {BOTTOM - waterTop > 24 && (
+                <g stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.9">
+                  <Flake x={92} y={waterTop + (BOTTOM - waterTop) * 0.45} r={7} />
+                  <Flake x={146} y={waterTop + (BOTTOM - waterTop) * 0.6} r={6} />
+                  <Flake x={120} y={waterTop + (BOTTOM - waterTop) * 0.3} r={5} />
+                </g>
+              )}
             </g>
           )}
         </g>
