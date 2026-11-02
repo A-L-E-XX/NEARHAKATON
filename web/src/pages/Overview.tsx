@@ -77,14 +77,16 @@ export function Overview() {
           </p>
           <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-[22px]">Here's what your agents did</h1>
           <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-fog">
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-baseline gap-1.5">
               <span
                 className={cx(
-                  "h-2 w-2 rounded-full",
+                  "h-2 w-2 shrink-0 self-center rounded-full",
                   status.level === "protected" ? TONE_DOT.secure : status.level === "paused" ? TONE_DOT.ice : status.level === "attention" ? TONE_DOT.caution : TONE_DOT.neutral,
                 )}
               />
-              <span className="text-mist">{status.label}.</span> {status.detail}
+              <span>
+                <span className="text-mist">{status.label}.</span> {status.detail}
+              </span>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Clock size={14} />

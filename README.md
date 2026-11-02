@@ -6,6 +6,8 @@ Phishbowl is a NEAR smart-contract vault for AI agents that handle money. It run
 
 Built for NEAR HACKATHON 2026, AI Security & Defense track.
 
+**Live dashboard:** https://a-l-e-xx.github.io/NEARHAKATON/ (reads NEAR testnet directly; no wallet needed to look around)
+
 ## The problem
 
 AI agents now hold wallets. One sentence hidden in an email, an invoice or a token name can trick an agent into sending money to a scammer (prompt injection). Spending limits cap the damage, but they never tell you whether your agent can be fooled, and they treat a gullible agent the same as a careful one.
@@ -115,7 +117,7 @@ GitHub Actions already does this on every change to the contract: it creates a t
 
 ### Open the dashboard
 
-You need Node.js 22. No wallet is needed to look around.
+Open https://a-l-e-xx.github.io/NEARHAKATON/. No wallet is needed to look around. To run it yourself instead, you need Node.js 22:
 
 ```bash
 cd web
@@ -123,7 +125,7 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
-Open the address it prints. You should see the Overview page reading the CI test vault from NEAR testnet: the vault is **Paused** (frozen), the agent's score is 20, and the activity feed shows a 0.01 NEAR payment followed by the failed "Fake refund email" drill. Then try:
+Either way, you should see the Overview page reading the CI test vault from NEAR testnet: the vault is **Paused** (frozen), the agent's score is 20, and the activity feed shows a 0.01 NEAR payment followed by the failed "Fake refund email" drill. Then try:
 
 - **Threat Detection**: the failed drill is listed as Critical, with what happened and what to do next. Click it to see the details.
 - **Transaction Monitor**: the 0.01 NEAR payment is *Completed* and the payment to the decoy is *Blocked*. Click a row for the full record.
