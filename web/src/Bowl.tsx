@@ -8,12 +8,26 @@ interface BowlProps {
 }
 
 // The bowl's body is a circle centred at (120, 132) with radius 98.
+const CX = 120;
+const CY = 132;
+const R = 98;
 const BOTTOM = 230;
 const TOP_OF_WATER_AT_100 = 58;
+const BODY = "M84 40 C 40 58 22 96 22 132 C 22 186 66 230 120 230 C 174 230 218 186 218 132 C 218 96 200 58 156 40";
+
+function levelToY(level: number): number {
+  return BOTTOM - (level / 100) * (BOTTOM - TOP_OF_WATER_AT_100);
+}
+
+/** Where the inside of the glass is, on the right-hand side, at height y. */
+function glassRightAt(y: number): number {
+  return CX + Math.sqrt(Math.max(0, R * R - (y - CY) * (y - CY)));
+}
 
 /**
- * The agent's score as water in a fishbowl. More water means more spending
- * power. A frozen vault ices over. Each running drill is a lure on a line.
+ * The agent's score as water in a fishbowl, with a gauge on the glass.
+ * More water means more spending power. A frozen vault ices over.
+ * Each running drill is a lure on a line.
  */
 export function Bowl({ score, frozen, activeDrills, size = 300 }: BowlProps) {
   const [filled, setFilled] = useState(false);
@@ -23,11 +37,14 @@ export function Bowl({ score, frozen, activeDrills, size = 300 }: BowlProps) {
   }, []);
 
   const level = Math.max(0, Math.min(100, score));
-  const waterTop = BOTTOM - (level / 100) * (BOTTOM - TOP_OF_WATER_AT_100);
+  const waterTop = levelToY(level);
   const lures = Math.min(activeDrills, 3);
   const label = `Agent score ${level} of 100${frozen ? ", vault frozen" : ""}${
     activeDrills ? `, ${activeDrills} scam drill${activeDrills === 1 ? "" : "s"} running` : ""
   }`;
+  const surface = frozen
+    ? `M0 ${waterTop} H 240 V 244 H 0 Z`
+    : `M0 ${waterTop} q 20 -7 40 0 t 40 0 t 40 0 t 40 0 t 40 0 t 40 0 V 244 H 0 Z`;
 
   return (
     <svg
@@ -40,11 +57,15 @@ export function Bowl({ score, frozen, activeDrills, size = 300 }: BowlProps) {
     >
       <defs>
         <clipPath id="bowl-inside">
-          <path d="M84 40 C 40 58 22 96 22 132 C 22 186 66 230 120 230 C 174 230 218 186 218 132 C 218 96 200 58 156 40 Z" />
+          <path d={`${BODY} Z`} />
         </clipPath>
         <linearGradient id="bowl-water" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#3CC4BC" />
           <stop offset="1" stopColor="#17807C" />
+        </linearGradient>
+        <linearGradient id="bowl-ice" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#CDEBFB" />
+          <stop offset="1" stopColor="#8FCBEE" />
         </linearGradient>
       </defs>
 
@@ -54,27 +75,41 @@ export function Bowl({ score, frozen, activeDrills, size = 300 }: BowlProps) {
           className="bowl__water"
           style={{ transform: `translateY(${filled ? 0 : BOTTOM - waterTop + 20}px)` }}
         >
-          <path
-            d={`M0 ${waterTop} q 20 -7 40 0 t 40 0 t 40 0 t 40 0 t 40 0 t 40 0 V 244 H 0 Z`}
-            fill={frozen ? "#CFE8F7" : "url(#bowl-water)"}
-          />
+          <path d={surface} fill={frozen ? "url(#bowl-ice)" : "url(#bowl-water)"} />
           {frozen && (
-            <g className="bowl__frost" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" fill="none">
-              <path d={`M70 ${waterTop + 30} l 14 14 m 0 -14 l -14 14 m 7 -10 v 20`} />
-              <path d={`M150 ${waterTop + 50} l 12 12 m 0 -12 l -12 12 m 6 -9 v 18`} />
-              <path d={`M112 ${waterTop + 18} l 9 9 m 0 -9 l -9 9`} />
-              <path d={`M40 ${waterTop + 60} L 200 ${waterTop + 40}`} opacity="0.5" />
+            <g>
+              <rect x="0" y={waterTop - 3} width="240" height="7" fill="#F4FBFF" />
+              <g stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.9">
+                <Flake x={78} y={waterTop + 32} r={9} />
+                <Flake x={150} y={waterTop + 52} r={7} />
+                <Flake x={116} y={waterTop + 78} r={6} />
+              </g>
             </g>
           )}
         </g>
       </g>
 
+      <g className="bowl__gauge" aria-hidden="true">
+        {[25, 50, 75, 100].map((mark) => {
+          const y = levelToY(mark);
+          const x = glassRightAt(y) - 6;
+          return (
+            <g key={mark}>
+              <line x1={x - 9} y1={y} x2={x} y2={y} strokeWidth="1.6" />
+              <text x={x - 13} y={y + 3.5} textAnchor="end">
+                {mark}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+
       {Array.from({ length: lures }, (_, i) => {
-        const x = 98 + i * 22;
+        const x = 96 + i * 22;
         const depth = Math.max(waterTop + 26, 110) + i * 14;
         return (
           <g key={i} className="bowl__lure">
-            <line x1={x} y1="8" x2={x} y2={depth} stroke="#0E2F44" strokeWidth="1.2" opacity="0.55" />
+            <line x1={x} y1="8" x2={x} y2={depth} strokeWidth="1.2" />
             <path
               d={`M${x} ${depth} v 10 a 5 5 0 1 1 -9 3`}
               fill="none"
@@ -86,21 +121,19 @@ export function Bowl({ score, frozen, activeDrills, size = 300 }: BowlProps) {
         );
       })}
 
-      <path
-        className="bowl__glass"
-        d="M84 40 C 40 58 22 96 22 132 C 22 186 66 230 120 230 C 174 230 218 186 218 132 C 218 96 200 58 156 40"
-        fill="none"
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
+      <path className="bowl__glass" d={BODY} fill="none" strokeWidth="5" strokeLinecap="round" />
       <path className="bowl__rim" d="M76 36 H 164" strokeWidth="6" strokeLinecap="round" />
-      <path
-        className="bowl__shine"
-        d="M48 104 C 42 122 42 146 52 166"
-        fill="none"
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
+      <path className="bowl__shine" d="M48 104 C 42 122 42 146 52 166" fill="none" strokeWidth="5" strokeLinecap="round" />
     </svg>
+  );
+}
+
+function Flake({ x, y, r }: { x: number; y: number; r: number }) {
+  const d = r * 0.866;
+  const h = r / 2;
+  return (
+    <path
+      d={`M${x} ${y - r} V ${y + r} M${x - d} ${y - h} L ${x + d} ${y + h} M${x - d} ${y + h} L ${x + d} ${y - h}`}
+    />
   );
 }

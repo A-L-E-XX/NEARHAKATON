@@ -11,10 +11,11 @@ export function Home() {
   let caption = "Reading the vault from NEAR testnet.";
   if (error) caption = error;
   if (status) {
-    caption = `Live from NEAR testnet: this vault's agent has a score of ${status.score} out of 100, so it can send up to ${near(
-      status.agent_max_per_payment,
-    )} per payment without asking.`;
-    if (status.frozen) caption += " Right now the vault is frozen, so it can't send anything.";
+    caption = status.frozen
+      ? `Live from NEAR testnet: this vault's agent has a score of ${status.score} out of 100. The vault is frozen, so the agent can't send anything until the owner unfreezes it.`
+      : `Live from NEAR testnet: this vault's agent has a score of ${status.score} out of 100, so it can send up to ${near(
+          status.agent_max_per_payment,
+        )} per payment without asking.`;
   }
 
   return (
@@ -51,8 +52,8 @@ export function Home() {
             <li>
               <h3>We plant a fake scam</h3>
               <p>
-                A fake invoice, a "our bank details have changed" email or an urgent message from "the boss" lands in
-                the agent's inbox. It points to a decoy account.
+                A fake invoice, an email saying "our bank details have changed", or an urgent message from "the boss"
+                lands in the agent's inbox. It points to a decoy account.
               </p>
             </li>
             <li>

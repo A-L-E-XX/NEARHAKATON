@@ -37,6 +37,7 @@ export function Dashboard({ vaultId }: { vaultId: string }) {
       <main className="page">
         <VaultHeading vaultId={vaultId} />
         <p className={error ? "notice notice--error" : "loading"}>{error ?? "Reading the vault from NEAR testnet."}</p>
+        {error && <VaultSwitch vaultId={vaultId} />}
       </main>
     );
   }
@@ -81,7 +82,9 @@ export function Dashboard({ vaultId }: { vaultId: string }) {
           <p className="score-line">
             Score <strong className="num">{status.score}</strong> out of 100, level {status.tier}.
           </p>
-          <p className="hint">{TIER_HELP[status.tier]}</p>
+          <p className="hint">
+            {status.frozen ? "Frozen: nothing goes through until the owner unfreezes the vault." : TIER_HELP[status.tier]}
+          </p>
           <dl className="facts">
             <div>
               <dt>Can send per payment</dt>
@@ -261,6 +264,8 @@ export function Dashboard({ vaultId }: { vaultId: string }) {
               </div>
             </dl>
           </section>
+
+          <VaultSwitch vaultId={vaultId} />
         </div>
       </div>
     </main>
@@ -268,6 +273,17 @@ export function Dashboard({ vaultId }: { vaultId: string }) {
 }
 
 function VaultHeading({ vaultId }: { vaultId: string }) {
+  return (
+    <div className="dash__head">
+      <h1>Vault</h1>
+      <p className="vault-id">
+        <a href={`${EXPLORER}/address/${vaultId}`}>{vaultId}</a> on NEAR testnet
+      </p>
+    </div>
+  );
+}
+
+function VaultSwitch({ vaultId }: { vaultId: string }) {
   const [draft, setDraft] = useState(vaultId);
 
   function open(event: FormEvent) {
@@ -277,28 +293,20 @@ function VaultHeading({ vaultId }: { vaultId: string }) {
   }
 
   return (
-    <div className="dash__head">
-      <div>
-        <h1>Vault</h1>
-        <p className="vault-id">
-          <a href={`${EXPLORER}/address/${vaultId}`}>{vaultId}</a> on NEAR testnet
-        </p>
+    <form className="vault-switch" onSubmit={open}>
+      <label htmlFor="vault-input">Look at another Phishbowl vault</label>
+      <div className="vault-switch__row">
+        <input
+          id="vault-input"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          spellCheck={false}
+          autoCapitalize="none"
+        />
+        <button className="btn btn--small btn--line" type="submit">
+          Show vault
+        </button>
       </div>
-      <form className="vault-switch" onSubmit={open}>
-        <label htmlFor="vault-input">Look at another vault</label>
-        <div className="vault-switch__row">
-          <input
-            id="vault-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            spellCheck={false}
-            autoCapitalize="none"
-          />
-          <button className="btn btn--small btn--line" type="submit">
-            Show vault
-          </button>
-        </div>
-      </form>
-    </div>
+    </form>
   );
 }

@@ -314,6 +314,36 @@ p {
   stroke: var(--ice-edge);
 }
 
+.page .bowl--frozen .bowl__glass,
+.page .bowl--frozen .bowl__rim {
+  stroke: #4f9fcf;
+}
+
+.bowl__gauge line {
+  stroke: rgba(255, 255, 255, 0.55);
+}
+
+.bowl__gauge text {
+  fill: rgba(255, 255, 255, 0.75);
+  font: 600 9px var(--font);
+}
+
+.page .bowl__gauge line {
+  stroke: rgba(14, 47, 68, 0.45);
+}
+
+.page .bowl__gauge text {
+  fill: rgba(14, 47, 68, 0.75);
+}
+
+.bowl__lure line {
+  stroke: rgba(255, 255, 255, 0.6);
+}
+
+.page .bowl__lure line {
+  stroke: rgba(14, 47, 68, 0.55);
+}
+
 .bowl__water {
   transition: transform 1.6s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
@@ -528,11 +558,6 @@ p {
 }
 
 .dash__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.25rem 2rem;
   margin-bottom: 2rem;
 }
 
@@ -544,7 +569,9 @@ p {
 
 .vault-switch {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
   font-size: 0.95rem;
 }
 

@@ -62,7 +62,7 @@ The agent works as the accounts-payable assistant for **Brightside Bakery**, a m
 |---|---|---|
 | `contract/` | Rust smart contract (near-sdk 5) and its unit tests | Done, live-tested on testnet |
 | `agent/` | Accounts-payable AI agent (TypeScript, NEAR AI Cloud, near-api-js) | First version, tests pass |
-| `web/` | Dashboard | Coming next |
+| `web/` | Homepage and live vault dashboard (Vite, React, NEAR Connect) | First version |
 
 ## Try it
 
