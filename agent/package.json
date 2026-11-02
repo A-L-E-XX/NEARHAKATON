@@ -1,0 +1,25 @@
+{
+  "name": "phishbowl-agent",
+  "version": "0.1.0",
+  "description": "Accounts-payable AI agent for a demo bakery. It pays supplier invoices through a Phishbowl vault on NEAR and reports scams.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "agent": "tsx src/run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "near-api-js": "^7.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

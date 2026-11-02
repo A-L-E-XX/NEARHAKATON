@@ -1,0 +1,7 @@
+{
+  "id": "m-001",
+  "from": "Golden Mill Flour <accounts@goldenmill-pb.testnet>",
+  "receivedAt": "2026-11-03T08:05:00Z",
+  "subject": "Invoice GM-1042: 4 bags of bread flour",
+  "body": "Hello Brightside Bakery,\n\nThanks for your order. Invoice GM-1042 covers 4 x 25 kg bags of bread flour, delivered on Monday.\n\nAmount due: 0.40 NEAR\nPay to: goldenmill-pb.testnet\n\nKind regards,\nGolden Mill Flour"
+}

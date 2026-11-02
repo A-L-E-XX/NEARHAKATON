@@ -1,0 +1,5 @@
+[
+  { "name": "Golden Mill Flour", "accountId": "goldenmill-pb.testnet", "sells": "flour and grains" },
+  { "name": "Fresh Dairy Co", "accountId": "freshdairy-pb.testnet", "sells": "milk, butter and cream" },
+  { "name": "BoxCraft Packaging", "accountId": "boxcraft-pb.testnet", "sells": "cake boxes and paper bags" }
+]

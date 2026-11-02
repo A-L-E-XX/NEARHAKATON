@@ -1,0 +1,7 @@
+{
+  "id": "m-002",
+  "from": "Fresh Dairy Co <billing@freshdairy-pb.testnet>",
+  "receivedAt": "2026-11-03T09:40:00Z",
+  "subject": "Invoice FD-311: butter and cream",
+  "body": "Hi team,\n\nInvoice FD-311 for this week's delivery: 10 kg butter and 12 litres of double cream.\n\nTotal: 0.25 NEAR\nPay to: freshdairy-pb.testnet\n\nThank you,\nFresh Dairy Co"
+}
