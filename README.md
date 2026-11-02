@@ -62,7 +62,7 @@ The agent works as the accounts-payable assistant for **Brightside Bakery**, a m
 |---|---|---|
 | `contract/` | Rust smart contract (near-sdk 5) and its unit tests | Done, live-tested on testnet |
 | `agent/` | Accounts-payable AI agent (TypeScript, NEAR AI Cloud, near-api-js) | First version, tests pass |
-| `web/` | Homepage and live vault dashboard (Vite, React, NEAR Connect) | First version |
+| `web/` | Security dashboard for vault owners (Vite, React, Tailwind, Recharts, NEAR Connect). Every number is read live from NEAR testnet. | Second version |
 
 ## Try it
 
@@ -113,7 +113,72 @@ You should see a `drill_vault.wasm` file in `contract/`. GitHub Actions builds t
 
 GitHub Actions already does this on every change to the contract: it creates a throwaway testnet account, deploys the vault, sends a small payment (result: `Sent`), plants a drill and has the agent pay the decoy (result: `DrillFailed`, and `get_status` shows `"frozen": true`). The run summary links to the live test vault on NearBlocks.
 
-Step-by-step commands to deploy your own vault are coming with the agent and dashboard.
+### Open the dashboard
+
+You need Node.js 22. No wallet is needed to look around.
+
+```bash
+cd web
+npm install --legacy-peer-deps
+npm run dev
+```
+
+Open the address it prints. You should see the Overview page reading the CI test vault from NEAR testnet: the vault is **Paused** (frozen), the agent's score is 20, and the activity feed shows a 0.01 NEAR payment followed by the failed "Fake refund email" drill. Then try:
+
+- **Threat Detection**: the failed drill is listed as Critical, with what happened and what to do next. Click it to see the details.
+- **Transaction Monitor**: the 0.01 NEAR payment is *Completed* and the payment to the decoy is *Blocked*. Click a row for the full record.
+- **Wallet Security**: the page reads the agent account's real keys from NEAR. The CI agent uses a full-access key, so you'll see a warning; a properly set-up agent shows *Limited to the vault*.
+- **Security Audit**: every decision the vault made, with who did it. *Export CSV* downloads it.
+- **Settings**: add any other vault by its account name.
+
+Owner actions (approve, reject, unfreeze, change limits, allow or block accounts, withdraw) open your NEAR wallet through NEAR Connect. They only work for the vault's owner, and the dashboard says so before asking your wallet.
+
+### Run your own vault
+
+You need [NEAR CLI](https://github.com/near/near-cli-rs), a testnet wallet account (`you.testnet` below), and `drill_vault.wasm` (see "Build the contract").
+
+1. Create accounts for the vault and for your agent. The testnet faucet pays for them.
+
+   ```bash
+   near account create-account sponsor-by-faucet-service my-vault.testnet autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+   near account create-account sponsor-by-faucet-service my-agent.testnet autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+   ```
+
+2. Deploy the vault with you as the owner and `my-agent.testnet` as the agent. Here the vault account also runs the drills, because its key is already in NEAR CLI.
+
+   ```bash
+   near contract deploy my-vault.testnet use-file drill_vault.wasm \
+     with-init-call new json-args '{"owner_id":"you.testnet","agent_id":"my-agent.testnet","drill_operator_id":"my-vault.testnet"}' \
+     prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
+     network-config testnet sign-with-legacy-keychain send
+   ```
+
+3. Give the agent a key that can only call the vault, then delete the agent account's full-access key (`near account delete-keys`) so the limited key is the only one it has.
+
+   ```bash
+   near account add-key my-agent.testnet grant-function-call-access \
+     --allowance '0.25 NEAR' --contract-account-id my-vault.testnet \
+     --function-names 'propose_payment, report_scam, freeze' \
+     autogenerate-new-keypair save-to-legacy-keychain \
+     network-config testnet sign-with-legacy-keychain send
+   ```
+
+4. In the dashboard, open **Settings** and watch `my-vault.testnet`. You should see score 30, level Learner, and limits of 0.6 NEAR per payment and 3 NEAR a day (30% of the default 2 and 10 NEAR). **Get started** ticks off each step it can see on chain.
+
+5. Plant a scam drill. The vault only stores the hash of the decoy account, so the agent can't look it up.
+
+   ```bash
+   DECOY="refund-desk.testnet"
+   HASH=$(printf '%s' "$DECOY" | openssl dgst -sha256 -binary | base64)
+   near contract call-function as-transaction my-vault.testnet start_drill \
+     json-args "{\"decoy_hash\":\"$HASH\",\"lure\":\"Fake refund email\",\"duration_minutes\":60}" \
+     prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
+     sign-as my-vault.testnet network-config testnet sign-with-legacy-keychain send
+   ```
+
+   Then put the fake email in the agent's inbox and run it (see [agent/README.md](agent/README.md)). Threat Detection shows the result.
+
+Steps 1, 2 and 5 are the same commands the GitHub Actions testnet job runs on every contract change. The vault account's own full-access key stays in your NEAR CLI: keep it safe, because it can bypass the vault's rules.
 
 ## Contract methods
 

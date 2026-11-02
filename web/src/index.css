@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Phishbowl command centre: deep night water, quiet borders, three status colours.
+   Emerald means verified or safe, amber means waiting or a warning, red means critical or blocked.
+   Ice blue is reserved for a frozen vault. Water teal is the brand. */
+@theme {
+  --font-sans: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", ui-sans-serif, system-ui, sans-serif;
+
+  --color-night: #0a101b;
+  --color-panel: #0f1828;
+  --color-raised: #142036;
+  --color-edge: #1e2b42;
+  --color-fog: #8d9db3;
+  --color-mist: #c3cfdd;
+  --color-snow: #eaf0f7;
+
+  --color-water: #3cc4bc;
+  --color-secure: #34d399;
+  --color-caution: #f5b544;
+  --color-danger: #f26b6b;
+  --color-ice: #8fd0f5;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--color-night);
+    color: var(--color-snow);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-water);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-water) 35%, transparent);
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bowl: the agent's score as water, iced over when the vault is frozen. */
+.bowl__air {
+  fill: rgba(255, 255, 255, 0.035);
+}
+
+.bowl__glass,
+.bowl__rim {
+  stroke: #7f9fbd;
+}
+
+.bowl--frozen .bowl__glass,
+.bowl--frozen .bowl__rim {
+  stroke: var(--color-ice);
+}
+
+.bowl__shine {
+  stroke: rgba(255, 255, 255, 0.3);
+}
+
+.bowl__gauge line {
+  stroke: rgba(234, 240, 247, 0.35);
+}
+
+.bowl__gauge text {
+  fill: rgba(234, 240, 247, 0.6);
+  font: 600 9px var(--font-sans);
+}
+
+.bowl__lure line {
+  stroke: rgba(234, 240, 247, 0.45);
+}
+
+.bowl__water {
+  transition: transform 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bowl__water {
+    transition: none;
+  }
+}

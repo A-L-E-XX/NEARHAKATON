@@ -1,17 +1,24 @@
 export const NETWORK = "testnet" as const;
+export const NETWORK_LABEL = "NEAR testnet";
 export const RPC_URL = "https://test.rpc.fastnear.com";
 export const EXPLORER = "https://testnet.nearblocks.io";
 export const GITHUB_URL = "https://github.com/A-L-E-XX/NEARHAKATON";
 
 /**
- * The vault the site shows by default. Set VITE_VAULT_ID when building, or add
- * ?vault=<account> to the address to look at any other Phishbowl vault.
+ * Vaults shown when someone opens the site for the first time. Set VITE_VAULTS
+ * (comma separated) when building to change them. People can add more in Settings.
  */
-export const DEFAULT_VAULT_ID: string =
-  import.meta.env.VITE_VAULT_ID || "phishbowl-ci-41456407509-1.testnet";
+export const DEFAULT_VAULTS: string[] = (import.meta.env.VITE_VAULTS || "phishbowl-ci-41456407509-1.testnet")
+  .split(",")
+  .map((id: string) => id.trim())
+  .filter(Boolean);
 
-export function vaultFromAddress(): string {
-  const fromQuery = new URLSearchParams(window.location.search).get("vault");
-  const fromHash = window.location.hash.match(/^#\/vault\/([^/?#]+)/)?.[1];
-  return decodeURIComponent(fromHash ?? fromQuery ?? DEFAULT_VAULT_ID);
-}
+/** Friendly names for known vaults. Anything else is shown by its account name. */
+export const AGENT_NAMES: Record<string, { name: string; note: string }> = {
+  "phishbowl-ci-41456407509-1.testnet": {
+    name: "Test agent (CI)",
+    note: "Created by GitHub Actions to check every contract change on testnet.",
+  },
+};
+
+export const REFRESH_MS = 15_000;

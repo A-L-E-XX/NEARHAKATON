@@ -53,7 +53,9 @@ Each run prints one line per message and saves the full log to `out/`.
 
 ## The agent's key
 
-The agent signs with a **function-call access key** on its own account. That key can only call `propose_payment`, `report_scam` and `freeze` on the vault. It cannot transfer NEAR, call any other contract, or add keys. The owner keeps the account's full-access key, so the agent's account cannot lock itself out if the key's gas allowance runs out.
+The agent signs with a **function-call access key** on its own account. That key can only call `propose_payment`, `report_scam` and `freeze` on the vault. It cannot transfer NEAR, call any other contract, or add keys.
+
+Once the agent has that key, delete the full-access key from the agent's account, so a hijacked agent has nothing more powerful to steal. The dashboard's Wallet Security page reads the agent account's keys from NEAR and warns while a full-access key is still there. If the limited key's gas allowance ever runs out, the owner points the vault at a fresh agent account with `set_agent`.
 
 ## Files
 
