@@ -1,0 +1,46 @@
+name: Contract
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+      - name: Run the tests
+        run: cargo test
+
+  build:
+    name: Build the contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+      - name: Build the WebAssembly file
+        run: cargo build --target wasm32-unknown-unknown --release
+      - name: Show the size
+        run: ls -lh target/wasm32-unknown-unknown/release/drill_vault.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drill_vault-wasm
+          path: contract/target/wasm32-unknown-unknown/release/drill_vault.wasm
