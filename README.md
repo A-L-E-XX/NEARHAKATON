@@ -50,16 +50,34 @@ Other things that cost points: paying a blocklisted account (-15), a payment the
 - **Sub-accounts and named accounts.** The vault lives at a readable sub-account such as `vault.yourname.testnet`, and the allowlist and blocklist use readable names.
 - **1 yoctoNEAR confirmations** for every owner action that loosens the rules (see above).
 - **NEP-297 events.** Every decision is logged as `EVENT_JSON` with the standard `drillvault`, so dashboards and indexers can follow along.
+- **NEAR AI Cloud.** The agent's brain is an open model running inside a TEE on NEAR AI Cloud. Every answer is signed inside the TEE, and each payment memo carries the answer's id (`ai:<chat id>`) so its signature can be checked later.
+
+## The demo business
+
+The agent works as the accounts-payable assistant for **Brightside Bakery**, a made-up business. It pays invoices from three suppliers (flour, dairy, packaging). The drills are the scams that hit real businesses: "our bank details have changed", fake invoices, urgent requests from "the boss". All names, invoices and amounts in the demo are sample data on NEAR testnet.
 
 ## Repository
 
 | Folder | What is in it | Status |
 |---|---|---|
-| `contract/` | Rust smart contract (near-sdk 5) and its unit tests | Done |
-| `agent/` | AI agent and the drill runner | Coming next |
+| `contract/` | Rust smart contract (near-sdk 5) and its unit tests | Done, live-tested on testnet |
+| `agent/` | Accounts-payable AI agent (TypeScript, NEAR AI Cloud, near-api-js) | First version, tests pass |
 | `web/` | Dashboard | Coming next |
 
 ## Try it
+
+### Run the agent tests and a dry run
+
+You need Node.js 22. No keys needed.
+
+```bash
+cd agent
+npm install
+npm test
+npm run agent -- --brain naive --dry-run
+```
+
+You should see `# pass 20`, then the naive agent planning to pay all three invoices and also the fake "our payment account has changed" email. With `--brain careful`, that email is reported instead. See [agent/README.md](agent/README.md) for running it against a real vault.
 
 ### Run the contract tests
 
