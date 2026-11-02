@@ -70,27 +70,32 @@ cd contract
 cargo test
 ```
 
-You should see every test pass, including these:
+You should see `test result: ok. 22 passed; 0 failed`, including these tests:
 
 - `paying_a_decoy_fails_the_drill_and_freezes_the_vault`: the agent pays a decoy, nothing is sent, the vault freezes and the score drops from 50 to 20.
 - `reporting_a_decoy_passes_the_drill_and_raises_limits`: the agent reports a decoy, the score rises from 50 to 60 and the per-payment limit rises from 1 to 1.2 NEAR.
 - `loosening_the_rules_needs_wallet_confirmation`: an owner call without 1 yoctoNEAR is refused.
 
-The same tests run on GitHub Actions on every push (see the Actions tab).
+The same tests run on GitHub Actions on every change to the contract (see the Actions tab).
 
 ### Build the contract
+
+You need Rust 1.86 and [binaryen](https://github.com/WebAssembly/binaryen) (for `wasm-opt`).
 
 ```bash
 cd contract
 rustup target add wasm32-unknown-unknown --toolchain 1.86.0
-cargo +1.86.0 build --target wasm32-unknown-unknown --release
+RUSTFLAGS="-C link-arg=-s" cargo +1.86.0 build --target wasm32-unknown-unknown --release
+wasm-opt -Oz --signext-lowering target/wasm32-unknown-unknown/release/drill_vault.wasm -o drill_vault.wasm
 ```
 
-You should see `target/wasm32-unknown-unknown/release/drill_vault.wasm`.
+You should see a `drill_vault.wasm` file in `contract/`. GitHub Actions builds the same file and attaches it to every run as `drill_vault-wasm`.
 
 ### Deploy and run a live drill on testnet
 
-Coming with the agent and dashboard.
+GitHub Actions already does this on every change to the contract: it creates a throwaway testnet account, deploys the vault, sends a small payment (result: `Sent`), plants a drill and has the agent pay the decoy (result: `DrillFailed`, and `get_status` shows `"frozen": true`). The run summary links to the live test vault on NearBlocks.
+
+Step-by-step commands to deploy your own vault are coming with the agent and dashboard.
 
 ## Contract methods
 

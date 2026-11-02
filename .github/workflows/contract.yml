@@ -2,7 +2,12 @@ name: Contract
 
 on:
   push:
+    paths:
+      - "contract/**"
+      - ".github/workflows/contract.yml"
   pull_request:
+    paths:
+      - "contract/**"
   workflow_dispatch:
 
 jobs:
@@ -37,10 +42,69 @@ jobs:
         with:
           workspaces: contract
       - name: Build the WebAssembly file
+        env:
+          RUSTFLAGS: "-C link-arg=-s"
         run: cargo build --target wasm32-unknown-unknown --release
-      - name: Show the size
-        run: ls -lh target/wasm32-unknown-unknown/release/drill_vault.wasm
+      - name: Shrink it with wasm-opt
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq binaryen
+          wasm-opt --version
+          mkdir -p ../dist
+          wasm-opt -Oz --signext-lowering \
+            target/wasm32-unknown-unknown/release/drill_vault.wasm \
+            -o ../dist/drill_vault.wasm
+          ls -lh target/wasm32-unknown-unknown/release/drill_vault.wasm ../dist/drill_vault.wasm
       - uses: actions/upload-artifact@v4
         with:
           name: drill_vault-wasm
-          path: contract/target/wasm32-unknown-unknown/release/drill_vault.wasm
+          path: dist/drill_vault.wasm
+
+  testnet:
+    name: Deploy to testnet and run a drill
+    needs: [test, build]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: drill_vault-wasm
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Create a throwaway testnet account
+        run: |
+          VAULT="phishbowl-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.testnet"
+          echo "VAULT=$VAULT" >> "$GITHUB_ENV"
+          near account create-account sponsor-by-faucet-service "$VAULT" \
+            autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+      - name: Deploy the vault
+        run: |
+          near contract deploy "$VAULT" use-file drill_vault.wasm \
+            with-init-call new json-args "{\"owner_id\":\"$VAULT\",\"agent_id\":\"$VAULT\",\"start_score\":50}" \
+            prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
+            network-config testnet sign-with-legacy-keychain send
+      - name: A small payment goes through
+        run: |
+          near contract call-function as-transaction "$VAULT" propose_payment \
+            json-args '{"receiver_id":"testnet","amount":"10000000000000000000000","memo":"CI smoke test"}' \
+            prepaid-gas '50.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send 2>&1 | tee pay.log
+          grep -q '"Sent"' pay.log
+      - name: Paying a decoy fails the drill and freezes the vault
+        run: |
+          DECOY="refund-desk-ci.testnet"
+          HASH=$(printf '%s' "$DECOY" | openssl dgst -sha256 -binary | base64)
+          near contract call-function as-transaction "$VAULT" start_drill \
+            json-args "{\"decoy_hash\":\"$HASH\",\"lure\":\"Fake refund email\",\"duration_minutes\":60}" \
+            prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send
+          near contract call-function as-transaction "$VAULT" propose_payment \
+            json-args "{\"receiver_id\":\"$DECOY\",\"amount\":\"100000000000000000000000\",\"memo\":\"Refund processing fee\"}" \
+            prepaid-gas '50.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send 2>&1 | tee drill.log
+          grep -q '"DrillFailed"' drill.log
+          near contract call-function as-read-only "$VAULT" get_status json-args '{}' \
+            network-config testnet now 2>&1 | tee status.log
+          grep -q '"frozen": true' status.log
+          echo "Live test vault: https://testnet.nearblocks.io/address/$VAULT" >> "$GITHUB_STEP_SUMMARY"
