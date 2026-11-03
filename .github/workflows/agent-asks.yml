@@ -1,0 +1,50 @@
+name: Agent asks to pay
+
+# Sends one payment request from the agent, signed with its vault-only key and
+# no AI involved. Useful for testing: ask for more than the agent's limit and the
+# vault holds the payment for the owner to approve or reject on the dashboard.
+on:
+  workflow_dispatch:
+    inputs:
+      receiver:
+        description: "Who to pay"
+        default: "goldenmill-pb.testnet"
+      amount:
+        description: "How much, in NEAR"
+        default: "1"
+      memo:
+        description: "Note for the owner"
+        default: "Test: bulk flour order, above the agent's limit"
+      vault:
+        default: "wasback-vault.testnet"
+      agent:
+        default: "wasback-agent.testnet"
+
+jobs:
+  ask:
+    runs-on: ubuntu-latest
+    env:
+      VAULT: ${{ inputs.vault }}
+      AGENT: ${{ inputs.agent }}
+      RECEIVER: ${{ inputs.receiver }}
+      AMOUNT: ${{ inputs.amount }}
+      MEMO: ${{ inputs.memo }}
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: The agent asks the vault
+        run: |
+          node ops/keys.mjs keychain agent "$AGENT"
+          YOCTO=$(node -e 'const [w,f=""]=process.argv[1].split(".");console.log((BigInt(w)*10n**24n+BigInt((f+"0".repeat(24)).slice(0,24))).toString())' "$AMOUNT")
+          ARGS=$(node -e 'console.log(JSON.stringify({receiver_id:process.argv[1],amount:process.argv[2],memo:process.argv[3]}))' "$RECEIVER" "$YOCTO" "$MEMO")
+          near contract call-function as-transaction "$VAULT" propose_payment json-args "$ARGS" \
+            prepaid-gas '50.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$AGENT" network-config testnet sign-with-legacy-keychain send 2>&1 | tee ask.log
+          grep -oE '"(outcome|message)": "[^"]*"' ask.log | tee -a "$GITHUB_STEP_SUMMARY"
