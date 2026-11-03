@@ -41,19 +41,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: contract
-      - name: Build the WebAssembly file
-        env:
-          RUSTFLAGS: "-C link-arg=-s"
-        run: cargo build --target wasm32-unknown-unknown --release
-      - name: Shrink it with wasm-opt
+      - name: Build with cargo-near
+        # cargo-near is NEAR's official build tool. A plain cargo build plus
+        # wasm-opt deployed fine but lost every panic message: refused calls
+        # showed "unreachable" instead of "Only the owner can do this".
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq binaryen
-          wasm-opt --version
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+          cargo near build non-reproducible-wasm
           mkdir -p ../dist
-          wasm-opt -Oz --signext-lowering \
-            target/wasm32-unknown-unknown/release/drill_vault.wasm \
-            -o ../dist/drill_vault.wasm
-          ls -lh target/wasm32-unknown-unknown/release/drill_vault.wasm ../dist/drill_vault.wasm
+          cp "$(find target/near -name 'drill_vault.wasm' | head -1)" ../dist/drill_vault.wasm
+          ls -lh ../dist/drill_vault.wasm
       - uses: actions/upload-artifact@v4
         with:
           name: drill_vault-wasm
@@ -91,6 +88,12 @@ jobs:
             prepaid-gas '50.0 Tgas' attached-deposit '0 NEAR' \
             sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send 2>&1 | tee pay.log
           grep -q '"Sent"' pay.log
+      - name: A refused call explains itself
+        run: |
+          near contract call-function as-transaction "$VAULT" unfreeze json-args '{}' \
+            prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send > refused.log 2>&1 && exit 1
+          grep -o 'Smart contract panicked: [^")]*' refused.log
       - name: Paying a decoy fails the drill and freezes the vault
         run: |
           DECOY="refund-desk-ci.testnet"

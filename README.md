@@ -100,16 +100,15 @@ The same tests run on GitHub Actions on every change to the contract (see the Ac
 
 ### Build the contract
 
-You need Rust 1.86 and [binaryen](https://github.com/WebAssembly/binaryen) (for `wasm-opt`).
+You need Rust 1.86 and [cargo-near](https://github.com/near/cargo-near), NEAR's official build tool.
 
 ```bash
 cd contract
 rustup target add wasm32-unknown-unknown --toolchain 1.86.0
-RUSTFLAGS="-C link-arg=-s" cargo +1.86.0 build --target wasm32-unknown-unknown --release
-wasm-opt -Oz --signext-lowering target/wasm32-unknown-unknown/release/drill_vault.wasm -o drill_vault.wasm
+cargo near build non-reproducible-wasm
 ```
 
-You should see a `drill_vault.wasm` file in `contract/`. GitHub Actions builds the same file and attaches it to every run as `drill_vault-wasm`.
+You should see `target/near/drill_vault.wasm`. GitHub Actions builds the same file and attaches it to every run as `drill_vault-wasm`. (A plain `cargo build` also deploys, but its refused calls lose their error messages, so use cargo-near.)
 
 ### Deploy and run a live drill on testnet
 
@@ -137,7 +136,7 @@ Owner actions (approve, reject, unfreeze, change limits, allow or block accounts
 
 ### Run your own vault
 
-You need [NEAR CLI](https://github.com/near/near-cli-rs), a testnet wallet account (`you.testnet` below), and `drill_vault.wasm` (see "Build the contract").
+You need [NEAR CLI](https://github.com/near/near-cli-rs), a testnet wallet account (`you.testnet` below), and `drill_vault.wasm` (see "Build the contract"; copy it out of `contract/target/near/`).
 
 1. Create accounts for the vault and for your agent. The testnet faucet pays for them.
 

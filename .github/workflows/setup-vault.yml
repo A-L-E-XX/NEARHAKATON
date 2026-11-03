@@ -42,14 +42,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: contract
-      - name: Build and shrink
-        env:
-          RUSTFLAGS: "-C link-arg=-s"
+      - name: Build with cargo-near
         run: |
-          cargo build --target wasm32-unknown-unknown --release
-          sudo apt-get update -qq && sudo apt-get install -y -qq binaryen
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+          cargo near build non-reproducible-wasm
           mkdir -p ../dist
-          wasm-opt -Oz --signext-lowering target/wasm32-unknown-unknown/release/drill_vault.wasm -o ../dist/drill_vault.wasm
+          cp "$(find target/near -name 'drill_vault.wasm' | head -1)" ../dist/drill_vault.wasm
       - uses: actions/upload-artifact@v4
         with:
           name: setup-wasm-${{ inputs.vault }}

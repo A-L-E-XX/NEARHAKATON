@@ -1,0 +1,51 @@
+name: Upgrade vault code
+
+# Deploys the latest contract code to existing vaults without re-initialising
+# them, so their money, history, score and settings stay as they are. Uses the
+# vault keys derived from PHISHBOWL_SEED.
+on:
+  workflow_dispatch:
+    inputs:
+      vaults:
+        description: "Vault accounts, separated by spaces"
+        default: "wasback-vault.testnet pb-league-deepseek.testnet pb-league-qwen.testnet pb-league-glm.testnet"
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    env:
+      VAULTS: ${{ inputs.vaults }}
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+      - name: Build with cargo-near
+        working-directory: contract
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+          cargo near build non-reproducible-wasm
+          cp "$(find target/near -name 'drill_vault.wasm' | head -1)" ../drill_vault.wasm
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Deploy the new code
+        run: |
+          for VAULT in $VAULTS; do
+            echo "=== $VAULT"
+            node ops/keys.mjs keychain vault "$VAULT"
+            near contract deploy "$VAULT" use-file drill_vault.wasm without-init-call \
+              network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "deployed|rror" | head -3
+            near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now \
+              | grep -E '"(owner_id|score|frozen|available_balance)"'
+            echo "- upgraded $VAULT" >> "$GITHUB_STEP_SUMMARY"
+          done
