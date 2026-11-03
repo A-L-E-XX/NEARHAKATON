@@ -100,9 +100,10 @@ jobs:
 
       - name: Create the agent with a vault-only key
         run: |
-          if near account list-keys "$AGENT" network-config testnet now > keys.log 2>&1; then
+          # list-keys succeeds with an empty table for a missing account, so check the account itself.
+          if near account view-account-summary "$AGENT" network-config testnet now > agent.log 2>&1; then
             echo "$AGENT already exists; checking its keys"
-            cat keys.log
+            near account list-keys "$AGENT" network-config testnet now | tee keys.log
           else
             near account create-account sponsor-by-faucet-service "$AGENT" \
               autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
