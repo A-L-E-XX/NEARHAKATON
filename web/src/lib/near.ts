@@ -1,17 +1,37 @@
 // Read-only calls to NEAR's JSON-RPC. Nothing here can sign or move money.
-import { RPC_URL } from "../config";
+import { RPC_FALLBACKS, RPC_URL } from "../config";
 
 interface RpcResponse<T> {
   result?: T & { error?: string };
   error?: { message?: string; cause?: { name?: string; info?: unknown } };
 }
 
+/**
+ * POST to the main RPC node, falling back to the others if it can't be reached or
+ * is rate limiting (busy nodes often answer without CORS headers, which the
+ * browser reports as a network error).
+ */
+async function rpcFetch(body: string): Promise<Response> {
+  let lastError: unknown = null;
+  for (const url of [RPC_URL, ...RPC_FALLBACKS]) {
+    try {
+      const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      if (response.status === 429 || response.status >= 500) {
+        lastError = new Error(`NEAR RPC answered ${response.status}`);
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("NEAR RPC can't be reached");
+}
+
 async function query<T>(params: Record<string, unknown>): Promise<T> {
-  const response = await fetch(RPC_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "phishbowl", method: "query", params: { finality: "final", ...params } }),
-  });
+  const response = await rpcFetch(
+    JSON.stringify({ jsonrpc: "2.0", id: "phishbowl", method: "query", params: { finality: "final", ...params } }),
+  );
   if (!response.ok) {
     throw new Error(`NEAR RPC answered ${response.status}`);
   }
@@ -98,11 +118,7 @@ export interface RpcHealth {
 /** Ask the RPC node for its status, timing the round trip. */
 export async function rpcHealth(): Promise<RpcHealth> {
   const started = performance.now();
-  const response = await fetch(RPC_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "phishbowl", method: "status", params: [] }),
-  });
+  const response = await rpcFetch(JSON.stringify({ jsonrpc: "2.0", id: "phishbowl", method: "status", params: [] }));
   if (!response.ok) throw new Error(`NEAR RPC answered ${response.status}`);
   const body = (await response.json()) as {
     result?: { chain_id: string; sync_info: { latest_block_height: number; latest_block_time: string } };

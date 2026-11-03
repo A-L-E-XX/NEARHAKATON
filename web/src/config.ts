@@ -1,6 +1,8 @@
 export const NETWORK = "testnet" as const;
 export const NETWORK_LABEL = "NEAR testnet";
 export const RPC_URL = "https://test.rpc.fastnear.com";
+/** Tried in order when the main RPC node refuses or is busy. */
+export const RPC_FALLBACKS = ["https://rpc.testnet.near.org"];
 export const EXPLORER = "https://testnet.nearblocks.io";
 export const GITHUB_URL = "https://github.com/A-L-E-XX/NEARHAKATON";
 
