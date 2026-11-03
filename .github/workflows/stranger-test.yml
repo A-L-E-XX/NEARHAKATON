@@ -1,0 +1,72 @@
+name: Stranger test
+
+# Proves on testnet that nobody but the owner can loosen a vault, even by going
+# around the website: a brand-new account calls each owner method directly with
+# the 1 yoctoNEAR confirmation attached, and every call must be refused. Then the
+# agent's own key tries an owner method and must be refused by NEAR itself.
+on:
+  workflow_dispatch:
+    inputs:
+      vault:
+        default: "wasback-vault.testnet"
+      agent:
+        default: "wasback-agent.testnet"
+
+jobs:
+  stranger:
+    runs-on: ubuntu-latest
+    env:
+      VAULT: ${{ inputs.vault }}
+      AGENT: ${{ inputs.agent }}
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Create a stranger account
+        run: |
+          STRANGER="pb-stranger-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.testnet"
+          echo "STRANGER=$STRANGER" >> "$GITHUB_ENV"
+          near account create-account sponsor-by-faucet-service "$STRANGER" \
+            autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+      - name: The stranger tries every owner action
+        run: |
+          near contract call-function as-read-only "$VAULT" get_pending json-args '{}' network-config testnet now > pending.log 2>&1 || true
+          REQUEST=$(grep -oE '"id": [0-9]+' pending.log | head -1 | grep -oE '[0-9]+' || echo 0)
+          echo "| Stranger tries | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          FAILED=0
+          attempt() { # attempt LABEL METHOD ARGS
+            if near contract call-function as-transaction "$VAULT" "$2" json-args "$3" \
+                 prepaid-gas '50.0 Tgas' attached-deposit '1 yoctoNEAR' \
+                 sign-as "$STRANGER" network-config testnet sign-with-legacy-keychain send > out.log 2>&1; then
+              echo "::error::$1 was ALLOWED"; echo "| $1 | **allowed (bad)** |" >> "$GITHUB_STEP_SUMMARY"; FAILED=1
+            else
+              WHY=$(grep -oE "Only the owner[^\"'\\\\]*|Smart contract panicked: [^\"'\\\\]*" out.log | head -1)
+              echo "$1: refused (${WHY:-refused})"; echo "| $1 | refused: ${WHY:-refused} |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+          attempt "Approve held payment $REQUEST" approve "{\"request_id\":$REQUEST}"
+          attempt "Withdraw 1 NEAR to itself" withdraw '{"amount":"1000000000000000000000000"}'
+          attempt "Unfreeze" unfreeze '{}'
+          attempt "Raise the limits" set_policy '{"policy":{"max_per_payment":"100000000000000000000000000","daily_limit":"100000000000000000000000000","max_requests_per_day":1000,"allowlist_only":false}}'
+          attempt "Make itself the agent" set_agent "{\"agent_id\":\"$STRANGER\"}"
+          attempt "Make itself the drill operator" set_drill_operator "{\"drill_operator_id\":\"$STRANGER\"}"
+          attempt "Set the score to 100" set_score '{"score":100}'
+          attempt "Allow its own account" allow "{\"account_id\":\"$STRANGER\"}"
+          exit $FAILED
+      - name: The agent's key tries an owner action
+        run: |
+          node ops/keys.mjs keychain agent "$AGENT"
+          if near contract call-function as-transaction "$VAULT" unfreeze json-args '{}' \
+               prepaid-gas '30.0 Tgas' attached-deposit '1 yoctoNEAR' \
+               sign-as "$AGENT" network-config testnet sign-with-legacy-keychain send > agent.log 2>&1; then
+            echo "::error::The agent's key could unfreeze the vault"; exit 1
+          fi
+          echo "Agent key refused: $(grep -oiE 'MethodNameMismatch|DepositWithFunctionCall|NotEnoughAllowance|[A-Za-z]*AccessKey[A-Za-z]*' agent.log | head -1)"
+          echo "| Agent key calls unfreeze | refused by NEAR: $(grep -oiE 'MethodNameMismatch|DepositWithFunctionCall|[A-Za-z]*AccessKey[A-Za-z]*' agent.log | head -1) |" >> "$GITHUB_STEP_SUMMARY"
