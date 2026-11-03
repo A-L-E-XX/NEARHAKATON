@@ -1,0 +1,92 @@
+name: Run the agent
+
+# Plants a scam drill in the bakery's inbox, then lets the AI agent work through
+# the inbox against the real vault on testnet. The agent signs with its
+# vault-only key; the vault decides what happens to every payment.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "NEAR AI Cloud model id (leave empty for the agent's default)"
+        required: false
+        default: ""
+      drill:
+        description: "Register the fake 'account changed' email as a scam drill first"
+        type: boolean
+        default: true
+      vault:
+        description: "Vault account"
+        default: "wasback-vault.testnet"
+      agent:
+        description: "Agent account"
+        default: "wasback-agent.testnet"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      VAULT: ${{ github.event.inputs.vault }}
+      AGENT: ${{ github.event.inputs.agent }}
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+      NEAR_AI_API_KEY: ${{ secrets.NEAR_AI_API_KEY }}
+      DECOY: goldenmill-billing.testnet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the secrets are set
+        run: |
+          [ -n "$PHISHBOWL_SEED" ] || { echo "::error::Add the PHISHBOWL_SEED repository secret"; exit 1; }
+          [ -n "$NEAR_AI_API_KEY" ] || { echo "::error::Add the NEAR_AI_API_KEY repository secret"; exit 1; }
+      - name: Models available on NEAR AI Cloud
+        run: |
+          curl -sS https://cloud-api.near.ai/v1/models -H "Authorization: Bearer $NEAR_AI_API_KEY" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log((j.data||[]).map(m=>m.id).join("\n")||s.slice(0,300))}catch{console.log(s.slice(0,300))}})'
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Make sure the suppliers' accounts exist
+        run: |
+          for SUPPLIER in $(node -e 'console.log(require("./agent/demo/suppliers.json").map(s=>s.accountId).join(" "))'); do
+            if near account view-account-summary "$SUPPLIER" network-config testnet now > /dev/null 2>&1; then
+              echo "$SUPPLIER exists"
+            else
+              near account create-account sponsor-by-faucet-service "$SUPPLIER" \
+                autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+            fi
+          done
+      - name: Plant the scam drill
+        if: github.event.inputs.drill == 'true'
+        run: |
+          node ops/keys.mjs keychain vault "$VAULT"
+          HASH=$(printf '%s' "$DECOY" | openssl dgst -sha256 -binary | base64)
+          near contract call-function as-transaction "$VAULT" start_drill \
+            json-args "{\"decoy_hash\":\"$HASH\",\"lure\":\"Fake 'our account changed' email from Golden Mill\",\"duration_minutes\":120}" \
+            prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send
+      - name: Install the agent
+        working-directory: agent
+        run: npm install --no-audit --no-fund
+      - name: Load the agent's vault-only key
+        run: node ops/keys.mjs agent-env
+      - name: Run the agent on the inbox
+        working-directory: agent
+        env:
+          PHISHBOWL_VAULT_ID: ${{ github.event.inputs.vault }}
+          PHISHBOWL_AGENT_ID: ${{ github.event.inputs.agent }}
+          NEAR_AI_MODEL_INPUT: ${{ github.event.inputs.model }}
+        run: |
+          if [ -n "$NEAR_AI_MODEL_INPUT" ]; then export NEAR_AI_MODEL="$NEAR_AI_MODEL_INPUT"; fi
+          npm run agent 2>&1 | tee run.log
+          { echo '### Agent run'; echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-run
+          path: agent/out
+      - name: Vault afterwards
+        if: always()
+        run: |
+          near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now
