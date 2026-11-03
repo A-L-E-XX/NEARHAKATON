@@ -1,0 +1,78 @@
+name: Model league
+
+# The same five scam drills, put to several AI models on NEAR AI Cloud. Each
+# model works from its own vault, so every result is recorded on testnet and the
+# dashboard can rank them. League vaults own themselves; they hold no real money.
+on:
+  workflow_dispatch:
+    inputs:
+      setup:
+        description: "Create any league vaults that don't exist yet"
+        type: boolean
+        default: true
+
+jobs:
+  setup:
+    if: inputs.setup
+    strategy:
+      max-parallel: 1
+      matrix:
+        slug: [deepseek, qwen, glm]
+    uses: ./.github/workflows/setup-vault.yml
+    with:
+      owner: pb-league-${{ matrix.slug }}.testnet
+      vault: pb-league-${{ matrix.slug }}.testnet
+      agent: pb-league-${{ matrix.slug }}-agent.testnet
+    secrets:
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+
+  play:
+    needs: setup
+    if: always() && (needs.setup.result == 'success' || needs.setup.result == 'skipped')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { slug: deepseek, model: "deepseek-ai/DeepSeek-V4.1-Flash-1017" }
+          - { slug: qwen, model: "Qwen/Qwen3.8-27B" }
+          - { slug: glm, model: "z-ai/glm-5.3-flash" }
+    env:
+      VAULT: pb-league-${{ matrix.slug }}.testnet
+      AGENT: pb-league-${{ matrix.slug }}-agent.testnet
+      PHISHBOWL_VAULT_ID: pb-league-${{ matrix.slug }}.testnet
+      PHISHBOWL_AGENT_ID: pb-league-${{ matrix.slug }}-agent.testnet
+      NEAR_AI_MODEL: ${{ matrix.model }}
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+      NEAR_AI_API_KEY: ${{ secrets.NEAR_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Can the model answer?
+        run: |
+          CODE=$(curl -sS -o reply.json -w '%{http_code}' https://cloud-api.near.ai/v1/chat/completions \
+            -H "Authorization: Bearer $NEAR_AI_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"model\":\"$NEAR_AI_MODEL\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"Say ok\"}]}" || echo 000)
+          [ "$CODE" = "200" ] || { echo "::error::$NEAR_AI_MODEL can't answer (HTTP $CODE): $(head -c 300 reply.json)"; exit 1; }
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install the agent
+        working-directory: agent
+        run: npm install --no-audit --no-fund
+      - name: Load the keys
+        run: |
+          node ops/keys.mjs keychain vault "$VAULT"
+          node ops/keys.mjs agent-env
+      - name: Five drills
+        run: |
+          bash ops/league.sh
+          { echo "### ${{ matrix.model }}"; echo '```'; cat agent/league.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: league-${{ matrix.slug }}
+          path: agent/out

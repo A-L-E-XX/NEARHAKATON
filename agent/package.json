@@ -11,7 +11,8 @@
   "scripts": {
     "agent": "tsx src/run.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "plan-drill": "tsx src/plan-drill.ts"
   },
   "dependencies": {
     "near-api-js": "^7.0.0",

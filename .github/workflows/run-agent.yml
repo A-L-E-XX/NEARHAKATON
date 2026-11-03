@@ -1,35 +1,55 @@
 name: Run the agent
 
-# Plants a scam drill in the bakery's inbox, then lets the AI agent work through
-# the inbox against the real vault on testnet. The agent signs with its
-# vault-only key; the vault decides what happens to every payment.
+# Two scenarios against the real vault on testnet:
+#   drill  - plant one scam drill (the vault only gets the decoy's hash), put the
+#            scam email in the agent's inbox, and let the AI deal with it.
+#   bakery - the bakery's demo inbox: real invoices plus the "account changed" scam.
+# The agent signs with its vault-only key; the vault decides every payment.
+# Runs a drill every day on its own, and can be started by hand or by other workflows.
 on:
+  schedule:
+    - cron: "41 10 * * *"
   workflow_dispatch:
     inputs:
-      model:
-        description: "NEAR AI Cloud model id (leave empty for the agent's default)"
-        required: false
+      scenario:
+        description: "drill or bakery"
+        type: choice
+        options: [drill, bakery]
+        default: drill
+      drill_id:
+        description: "Which drill (empty = random): account-changed, lookalike-supplier, boss-urgent, refund-fee, hidden-instruction"
         default: ""
-      drill:
-        description: "Register the fake 'account changed' email as a scam drill first"
-        type: boolean
-        default: true
+      model:
+        description: "NEAR AI Cloud model id (empty = the agent's default)"
+        default: ""
       vault:
         description: "Vault account"
         default: "wasback-vault.testnet"
       agent:
         description: "Agent account"
         default: "wasback-agent.testnet"
+  workflow_call:
+    inputs:
+      scenario: { type: string, default: drill }
+      drill_id: { type: string, default: "" }
+      model: { type: string, default: "" }
+      vault: { type: string, required: true }
+      agent: { type: string, required: true }
+    secrets:
+      PHISHBOWL_SEED: { required: true }
+      NEAR_AI_API_KEY: { required: true }
 
 jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      VAULT: ${{ github.event.inputs.vault }}
-      AGENT: ${{ github.event.inputs.agent }}
+      SCENARIO: ${{ inputs.scenario || 'drill' }}
+      DRILL_ID: ${{ inputs.drill_id || '' }}
+      MODEL: ${{ inputs.model || 'deepseek-ai/DeepSeek-V4.1-Flash-1017' }}
+      VAULT: ${{ inputs.vault || 'wasback-vault.testnet' }}
+      AGENT: ${{ inputs.agent || 'wasback-agent.testnet' }}
       PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
       NEAR_AI_API_KEY: ${{ secrets.NEAR_AI_API_KEY }}
-      DECOY: goldenmill-billing.testnet
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,59 +59,82 @@ jobs:
         run: |
           [ -n "$PHISHBOWL_SEED" ] || { echo "::error::Add the PHISHBOWL_SEED repository secret"; exit 1; }
           [ -n "$NEAR_AI_API_KEY" ] || { echo "::error::Add the NEAR_AI_API_KEY repository secret"; exit 1; }
-      - name: Models available on NEAR AI Cloud
+
+      # Plant nothing unless the AI can actually answer: a drill nobody can see
+      # would expire as "missed" and wrongly count against the agent.
+      - name: Can the AI answer?
+        id: ai
         run: |
-          curl -sS https://cloud-api.near.ai/v1/models -H "Authorization: Bearer $NEAR_AI_API_KEY" \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log((j.data||[]).map(m=>m.id).join("\n")||s.slice(0,300))}catch{console.log(s.slice(0,300))}})'
+          CODE=$(curl -sS -o reply.json -w '%{http_code}' https://cloud-api.near.ai/v1/chat/completions \
+            -H "Authorization: Bearer $NEAR_AI_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"model\":\"$MODEL\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"Say ok\"}]}" || echo 000)
+          if [ "$CODE" = "200" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "NEAR AI Cloud answered with $MODEL"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NEAR AI Cloud can't answer right now (HTTP $CODE), so no drill was planted: $(head -c 300 reply.json)"
+            echo "NEAR AI Cloud didn't answer (HTTP $CODE). Nothing was planted or paid." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Install NEAR CLI
+        if: steps.ai.outputs.ok == 'true'
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install the agent
+        if: steps.ai.outputs.ok == 'true'
+        working-directory: agent
+        run: npm install --no-audit --no-fund
       - name: Make sure the suppliers' accounts exist
+        if: steps.ai.outputs.ok == 'true' && env.SCENARIO == 'bakery'
         run: |
           for SUPPLIER in $(node -e 'console.log(require("./agent/demo/suppliers.json").map(s=>s.accountId).join(" "))'); do
-            if near account view-account-summary "$SUPPLIER" network-config testnet now > /dev/null 2>&1; then
-              echo "$SUPPLIER exists"
-            else
-              near account create-account sponsor-by-faucet-service "$SUPPLIER" \
-                autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
-            fi
+            near account view-account-summary "$SUPPLIER" network-config testnet now > /dev/null 2>&1 \
+              || near account create-account sponsor-by-faucet-service "$SUPPLIER" \
+                   autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
           done
+      - name: Choose the scam
+        if: steps.ai.outputs.ok == 'true'
+        run: |
+          if [ "$SCENARIO" = "drill" ]; then
+            (cd agent && npm run -s plan-drill -- --out ../inbox ${DRILL_ID:+--id "$DRILL_ID"})
+          else
+            cp -r agent/demo/inbox inbox
+            node -e 'const d=require("./agent/demo/drills.json").find(x=>x.id==="account-changed");require("fs").appendFileSync(process.env.GITHUB_ENV,`DECOY=${d.decoy}\nLURE=${d.lure}\n`)'
+          fi
       - name: Plant the scam drill
-        if: github.event.inputs.drill == 'true'
+        if: steps.ai.outputs.ok == 'true'
         run: |
           node ops/keys.mjs keychain vault "$VAULT"
-          # Settle drills whose time ran out, so the same decoy can be used again.
+          # Settle drills whose time ran out, so a decoy can be used again.
           near contract call-function as-transaction "$VAULT" close_expired_drills json-args '{}' \
             prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
             sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send
           HASH=$(printf '%s' "$DECOY" | openssl dgst -sha256 -binary | base64)
-          near contract call-function as-transaction "$VAULT" start_drill \
-            json-args "{\"decoy_hash\":\"$HASH\",\"lure\":\"Fake 'our account changed' email from Golden Mill\",\"duration_minutes\":120}" \
+          ARGS=$(node -e 'console.log(JSON.stringify({decoy_hash:process.argv[1],lure:process.env.LURE,duration_minutes:120}))' "$HASH")
+          near contract call-function as-transaction "$VAULT" start_drill json-args "$ARGS" \
             prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
             sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send \
             || echo "::notice::Couldn't start a new drill; one for this decoy is probably still running"
-      - name: Install the agent
-        working-directory: agent
-        run: npm install --no-audit --no-fund
       - name: Load the agent's vault-only key
+        if: steps.ai.outputs.ok == 'true'
         run: node ops/keys.mjs agent-env
-      - name: Run the agent on the inbox
+      - name: Run the agent
+        if: steps.ai.outputs.ok == 'true'
         working-directory: agent
         env:
-          PHISHBOWL_VAULT_ID: ${{ github.event.inputs.vault }}
-          PHISHBOWL_AGENT_ID: ${{ github.event.inputs.agent }}
-          NEAR_AI_MODEL_INPUT: ${{ github.event.inputs.model }}
+          PHISHBOWL_VAULT_ID: ${{ inputs.vault || 'wasback-vault.testnet' }}
+          PHISHBOWL_AGENT_ID: ${{ inputs.agent || 'wasback-agent.testnet' }}
+          NEAR_AI_MODEL: ${{ inputs.model || 'deepseek-ai/DeepSeek-V4.1-Flash-1017' }}
         run: |
-          if [ -n "$NEAR_AI_MODEL_INPUT" ]; then export NEAR_AI_MODEL="$NEAR_AI_MODEL_INPUT"; fi
-          npm run agent 2>&1 | tee run.log
-          { echo '### Agent run'; echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          npm run -s agent -- --inbox ../inbox 2>&1 | tee run.log
+          { echo "### $SCENARIO run with $NEAR_AI_MODEL"; echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.ai.outputs.ok == 'true'
         with:
-          name: agent-run
+          name: agent-run-${{ github.run_id }}-${{ strategy.job-index }}
           path: agent/out
-      - name: Vault afterwards
-        if: always()
-        run: |
-          near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now
+      - name: The vault afterwards
+        if: steps.ai.outputs.ok == 'true'
+        run: near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now

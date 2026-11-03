@@ -18,6 +18,13 @@ on:
         description: "Agent account to create"
         required: true
         default: "wasback-agent.testnet"
+  workflow_call:
+    inputs:
+      owner: { type: string, required: true }
+      vault: { type: string, required: true }
+      agent: { type: string, required: true }
+    secrets:
+      PHISHBOWL_SEED: { required: true }
 
 jobs:
   build:
@@ -45,7 +52,7 @@ jobs:
           wasm-opt -Oz --signext-lowering target/wasm32-unknown-unknown/release/drill_vault.wasm -o ../dist/drill_vault.wasm
       - uses: actions/upload-artifact@v4
         with:
-          name: setup-wasm
+          name: setup-wasm-${{ inputs.vault }}
           path: dist/drill_vault.wasm
 
   setup:
@@ -53,15 +60,15 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      OWNER: ${{ github.event.inputs.owner }}
-      VAULT: ${{ github.event.inputs.vault }}
-      AGENT: ${{ github.event.inputs.agent }}
+      OWNER: ${{ inputs.owner }}
+      VAULT: ${{ inputs.vault }}
+      AGENT: ${{ inputs.agent }}
       PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: setup-wasm
+          name: setup-wasm-${{ inputs.vault }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -79,6 +86,8 @@ jobs:
           curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: The owner's wallet exists
+        # A vault may own itself (the model league does this so the harness can unfreeze it).
+        if: inputs.owner != inputs.vault
         run: near account view-account-summary "$OWNER" network-config testnet now
 
       - name: Create and deploy the vault
