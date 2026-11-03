@@ -25,6 +25,8 @@ const shots = [
   { name: "14-overview-mobile", hash: "#/overview", ...mobile },
   { name: "15-threats-mobile", hash: "#/threats", ...mobile },
   { name: "16-audit-mobile", hash: "#/audit", ...mobile },
+  { name: "17-connect-desktop", hash: "#/overview", ...desktop, click: "header button:has-text('Connect wallet')", wait: 4000 },
+  { name: "18-connect-mobile", hash: "#/overview", ...mobile, click: "header button[aria-label='Connect wallet']", wait: 4000 },
 ];
 
 await mkdir("screenshots", { recursive: true });
@@ -45,7 +47,7 @@ for (const shot of shots) {
   if (shot.click) {
     await page
       .click(shot.click, { timeout: 5_000 })
-      .then(() => page.waitForTimeout(600))
+      .then(() => page.waitForTimeout(shot.wait ?? 600))
       .catch(() => console.log(`[${shot.name}] nothing to click at ${shot.click}`));
   }
   await page.screenshot({ path: `screenshots/${shot.name}.png`, fullPage: !shot.click });
