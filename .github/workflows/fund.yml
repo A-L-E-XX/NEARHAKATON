@@ -1,0 +1,40 @@
+name: Send testnet NEAR
+
+# Testnet NEAR has no value. When the faucet won't fund a wallet, this creates a
+# throwaway faucet account and passes almost all of its NEAR on.
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: "Testnet account to fund (must end in .testnet)"
+        required: true
+
+jobs:
+  fund:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: ${{ github.event.inputs.account }}
+    steps:
+      - name: Check the account name
+        run: |
+          if ! printf '%s' "$TARGET" | grep -Eq '^[a-z0-9_-]+(\.[a-z0-9_-]+)*\.testnet$'; then
+            echo "::error::'$TARGET' is not a testnet account name"; exit 1
+          fi
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: The account exists
+        run: near account view-account-summary "$TARGET" network-config testnet now
+      - name: Create a throwaway faucet account
+        run: |
+          GIFT="phishbowl-gift-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.testnet"
+          echo "GIFT=$GIFT" >> "$GITHUB_ENV"
+          near account create-account sponsor-by-faucet-service "$GIFT" \
+            autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+      - name: Send 9 NEAR
+        run: |
+          near tokens "$GIFT" send-near "$TARGET" '9 NEAR' \
+            network-config testnet sign-with-legacy-keychain send
+          near account view-account-summary "$TARGET" network-config testnet now | tee summary.log
+          echo "Sent 9 testnet NEAR to $TARGET: https://testnet.nearblocks.io/address/$TARGET" >> "$GITHUB_STEP_SUMMARY"
