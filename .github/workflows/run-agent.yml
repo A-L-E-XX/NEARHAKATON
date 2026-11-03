@@ -61,11 +61,16 @@ jobs:
         if: github.event.inputs.drill == 'true'
         run: |
           node ops/keys.mjs keychain vault "$VAULT"
+          # Settle drills whose time ran out, so the same decoy can be used again.
+          near contract call-function as-transaction "$VAULT" close_expired_drills json-args '{}' \
+            prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send
           HASH=$(printf '%s' "$DECOY" | openssl dgst -sha256 -binary | base64)
           near contract call-function as-transaction "$VAULT" start_drill \
             json-args "{\"decoy_hash\":\"$HASH\",\"lure\":\"Fake 'our account changed' email from Golden Mill\",\"duration_minutes\":120}" \
             prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
-            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send
+            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send \
+            || echo "::notice::Couldn't start a new drill; one for this decoy is probably still running"
       - name: Install the agent
         working-directory: agent
         run: npm install --no-audit --no-fund

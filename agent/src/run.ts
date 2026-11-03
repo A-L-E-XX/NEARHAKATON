@@ -8,7 +8,7 @@ import { loadInbox, loadSuppliers } from "./inbox.ts";
 import type { Brain, StepResult, Vault } from "./types.ts";
 import { DryRunVault, NearVault } from "./vault.ts";
 
-const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V3.1";
+const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash-1017";
 const DEFAULT_RPC = "https://test.rpc.fastnear.com";
 
 const LABELS: Record<string, string> = {

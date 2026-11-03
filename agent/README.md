@@ -39,7 +39,7 @@ You should see three invoices it would pay, the staff lunch email skipped, and a
 | Setting | What it is |
 |---|---|
 | `NEAR_AI_API_KEY` | API key from cloud.near.ai |
-| `NEAR_AI_MODEL` | Model id, default `deepseek-ai/DeepSeek-V3.1` (list them at `https://cloud-api.near.ai/v1/models`) |
+| `NEAR_AI_MODEL` | Model id, default `deepseek-ai/DeepSeek-V4.1-Flash-1017` (list them at `https://cloud-api.near.ai/v1/models`) |
 | `PHISHBOWL_VAULT_ID` | The vault contract account |
 | `PHISHBOWL_AGENT_ID` | The agent's account |
 | `PHISHBOWL_AGENT_KEY` | The agent's function-call key (`ed25519:...`) |
