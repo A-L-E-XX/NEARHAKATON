@@ -47,7 +47,8 @@ jobs:
                  sign-as "$STRANGER" network-config testnet sign-with-legacy-keychain send > out.log 2>&1; then
               echo "::error::$1 was ALLOWED"; echo "| $1 | **allowed (bad)** |" >> "$GITHUB_STEP_SUMMARY"; FAILED=1
             else
-              WHY=$(grep -oE "Only the owner[^\"'\\\\]*|Smart contract panicked: [^\"'\\\\]*" out.log | head -1)
+              WHY=$(grep -oE "Smart contract panicked: [^\"\\]*|Only the [a-z ]+[^\"\\]*|[A-Z][A-Za-z]+Error[^\"]{0,80}" out.log | head -1 | tr -d '|')
+              echo "--- $1 ---"; grep -iE "panicked|error|only" out.log | head -5
               echo "$1: refused (${WHY:-refused})"; echo "| $1 | refused: ${WHY:-refused} |" >> "$GITHUB_STEP_SUMMARY"
             fi
           }
@@ -68,5 +69,5 @@ jobs:
                sign-as "$AGENT" network-config testnet sign-with-legacy-keychain send > agent.log 2>&1; then
             echo "::error::The agent's key could unfreeze the vault"; exit 1
           fi
-          echo "Agent key refused: $(grep -oiE 'MethodNameMismatch|DepositWithFunctionCall|NotEnoughAllowance|[A-Za-z]*AccessKey[A-Za-z]*' agent.log | head -1)"
+          echo "Agent key refused:"; grep -iE "error|mismatch|deposit|access" agent.log | head -8
           echo "| Agent key calls unfreeze | refused by NEAR: $(grep -oiE 'MethodNameMismatch|DepositWithFunctionCall|[A-Za-z]*AccessKey[A-Za-z]*' agent.log | head -1) |" >> "$GITHUB_STEP_SUMMARY"
