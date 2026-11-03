@@ -1,0 +1,137 @@
+name: Set up a vault
+
+# Creates a Phishbowl vault owned by a person's wallet, plus an agent account
+# whose only key can call the vault. Safe to run again: existing accounts are
+# checked, not recreated. Keys come from the PHISHBOWL_SEED repository secret.
+on:
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: "Owner wallet (only this account can approve, unfreeze or change limits)"
+        required: true
+        default: "wasback.testnet"
+      vault:
+        description: "Vault account to create"
+        required: true
+        default: "wasback-vault.testnet"
+      agent:
+        description: "Agent account to create"
+        required: true
+        default: "wasback-agent.testnet"
+
+jobs:
+  build:
+    name: Build the contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+      - name: Build and shrink
+        env:
+          RUSTFLAGS: "-C link-arg=-s"
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          sudo apt-get update -qq && sudo apt-get install -y -qq binaryen
+          mkdir -p ../dist
+          wasm-opt -Oz --signext-lowering target/wasm32-unknown-unknown/release/drill_vault.wasm -o ../dist/drill_vault.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-wasm
+          path: dist/drill_vault.wasm
+
+  setup:
+    name: Create the vault and the agent
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.event.inputs.owner }}
+      VAULT: ${{ github.event.inputs.vault }}
+      AGENT: ${{ github.event.inputs.agent }}
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: setup-wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the names
+        run: |
+          for NAME in "$OWNER" "$VAULT" "$AGENT"; do
+            printf '%s' "$NAME" | grep -Eq '^[a-z0-9_-]+(\.[a-z0-9_-]+)*\.testnet$' \
+              || { echo "::error::'$NAME' is not a testnet account name"; exit 1; }
+          done
+          [ "$OWNER" != "$AGENT" ] && [ "$VAULT" != "$AGENT" ] || { echo "::error::The agent must be its own account"; exit 1; }
+      - name: Derive the keys from the secret
+        run: node ops/keys.mjs env
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: The owner's wallet exists
+        run: near account view-account-summary "$OWNER" network-config testnet now
+
+      - name: Create and deploy the vault
+        run: |
+          node ops/keys.mjs keychain vault "$VAULT"
+          if near account view-account-summary "$VAULT" network-config testnet now > vault.log 2>&1; then
+            echo "$VAULT already exists; checking it is our vault"
+            near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now | tee status.log
+            grep -q "\"owner_id\": \"$OWNER\"" status.log || { echo "::error::$VAULT exists but is not a vault owned by $OWNER"; exit 1; }
+          else
+            near account create-account sponsor-by-faucet-service "$VAULT" \
+              use-manually-provided-public-key "$VAULT_PUB" network-config testnet create
+            sleep 3
+            near contract deploy "$VAULT" use-file drill_vault.wasm \
+              with-init-call new json-args "{\"owner_id\":\"$OWNER\",\"agent_id\":\"$AGENT\",\"drill_operator_id\":\"$VAULT\"}" \
+              prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
+              network-config testnet sign-with-legacy-keychain send
+          fi
+
+      - name: Create the agent with a vault-only key
+        run: |
+          if near account list-keys "$AGENT" network-config testnet now > keys.log 2>&1; then
+            echo "$AGENT already exists; checking its keys"
+            cat keys.log
+          else
+            near account create-account sponsor-by-faucet-service "$AGENT" \
+              autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+            sleep 3
+            TEMP_PUB=$(node -e "console.log(require(process.env.HOME + '/.near-credentials/testnet/' + process.env.AGENT + '.json').public_key)")
+            # 1. The key the agent will use: it can only call these three methods on the vault.
+            near account add-key "$AGENT" grant-function-call-access \
+              --allowance '0.25 NEAR' --contract-account-id "$VAULT" \
+              --function-names 'propose_payment, report_scam, freeze' \
+              use-manually-provided-public-key "$AGENT_PUB" \
+              network-config testnet sign-with-legacy-keychain send
+            # 2. Move the faucet's NEAR into the vault, where the agent can only ask to spend it.
+            near tokens "$AGENT" send-near "$VAULT" '9 NEAR' \
+              network-config testnet sign-with-legacy-keychain send
+            # 3. Delete the temporary full-access key, so the limited key is the only one left.
+            near account delete-keys "$AGENT" public-keys "$TEMP_PUB" \
+              network-config testnet sign-with-legacy-keychain send
+            sleep 3
+            near account list-keys "$AGENT" network-config testnet now | tee keys.log
+          fi
+          grep -q "${AGENT_PUB#ed25519:}" keys.log || { echo "::error::$AGENT doesn't have the agent key"; exit 1; }
+          if grep -qi "full access" keys.log; then echo "::warning::$AGENT still has a full-access key"; fi
+
+      - name: Summary
+        run: |
+          near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now | tee status.log
+          {
+            echo "### Vault ready"
+            echo "- Vault: https://testnet.nearblocks.io/address/$VAULT"
+            echo "- Agent: https://testnet.nearblocks.io/address/$AGENT"
+            echo "- Owner: $OWNER"
+          } >> "$GITHUB_STEP_SUMMARY"
