@@ -1,0 +1,26 @@
+name: Diagnose refusals
+on:
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    env:
+      VAULT: wasback-vault.testnet
+    steps:
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Stranger
+        run: |
+          S="pb-diag-${GITHUB_RUN_ID}.testnet"
+          near account create-account sponsor-by-faucet-service "$S" autogenerate-new-keypair save-to-legacy-keychain network-config testnet create > /dev/null 2>&1
+          try() { echo "=== $1 (deposit $3)"; near contract call-function as-transaction "$VAULT" "$1" json-args "$2" prepaid-gas '30.0 Tgas' attached-deposit "$3" sign-as "$S" network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "ExecutionError|panicked|Error:" | head -3; }
+          try unfreeze '{}' '0 NEAR'
+          try unfreeze '{}' '1 yoctoNEAR'
+          try reject '{"request_id":2}' '0 NEAR'
+          try block '{"account_id":"x.testnet"}' '0 NEAR'
+          try freeze '{}' '0 NEAR'
+          try start_drill '{"decoy_hash":"AAAA","lure":"x","duration_minutes":5}' '0 NEAR'
+          try report_scam '{"account_id":"x.testnet"}' '0 NEAR'
+          try get_status '{}' '1 yoctoNEAR'
