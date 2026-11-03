@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 const base = process.env.SITE_URL ?? "http://localhost:4173/";
 const desktop = { width: 1440, height: 900 };
 const mobile = { width: 390, height: 844 };
-const vault = "phishbowl-ci-41456407509-1.testnet";
+const vault = "wasback-vault.testnet";
 
 const shots = [
   { name: "01-overview", hash: "#/overview", ...desktop },
