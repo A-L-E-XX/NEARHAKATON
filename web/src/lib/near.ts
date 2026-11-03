@@ -11,7 +11,7 @@ interface RpcResponse<T> {
  * is rate limiting (busy nodes often answer without CORS headers, which the
  * browser reports as a network error).
  */
-async function rpcFetch(body: string): Promise<Response> {
+async function rpcFetchOnce(body: string): Promise<Response> {
   let lastError: unknown = null;
   for (const url of [RPC_URL, ...RPC_FALLBACKS]) {
     try {
@@ -21,6 +21,38 @@ async function rpcFetch(body: string): Promise<Response> {
         continue;
       }
       return response;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("NEAR RPC can't be reached");
+}
+
+// Free RPC nodes rate-limit bursts, so at most a few requests run at once and a
+// refused request is retried after a short, growing pause.
+const MAX_IN_FLIGHT = 3;
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+
+async function withSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (inFlight >= MAX_IN_FLIGHT) await new Promise<void>((resolve) => waiting.push(resolve));
+  inFlight += 1;
+  try {
+    return await task();
+  } finally {
+    inFlight -= 1;
+    waiting.shift()?.();
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function rpcFetch(body: string): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt) await sleep(800 * attempt);
+    try {
+      return await withSlot(() => rpcFetchOnce(body));
     } catch (err) {
       lastError = err;
     }
