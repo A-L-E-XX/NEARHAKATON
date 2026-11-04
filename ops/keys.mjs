@@ -5,6 +5,7 @@
 //   node ops/keys.mjs env                    public keys -> $GITHUB_ENV, private keys masked
 //   node ops/keys.mjs keychain LABEL ACCOUNT  write ACCOUNT's legacy NEAR CLI key file (vault|agent|ops|factory)
 //   node ops/keys.mjs agent-env              PHISHBOWL_AGENT_KEY -> $GITHUB_ENV, masked
+//   node ops/keys.mjs hash FILE              base58 SHA-256 of a wasm file (its NEAR code hash)
 //   node ops/keys.mjs selftest               check the derivation with a dummy secret
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
@@ -95,6 +96,10 @@ if (command === "env") {
   console.log(`::add-mask::${agent.secretKey}`);
   toEnv([`PHISHBOWL_AGENT_KEY=${agent.secretKey}`]);
   console.log(`Agent key ${agent.publicKey} ready`);
+} else if (command === "hash") {
+  // NEAR identifies code (including global contracts) by base58 of its SHA-256.
+  const { readFileSync } = await import("node:fs");
+  console.log(base58(createHash("sha256").update(readFileSync(label)).digest()));
 } else if (command === "selftest") {
   const a = keyPair("dummy secret for testing only", "vault");
   const b = keyPair("dummy secret for testing only", "vault");

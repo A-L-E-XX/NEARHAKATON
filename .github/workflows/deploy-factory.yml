@@ -1,0 +1,161 @@
+name: Deploy the factory
+
+# Puts the self-service sign-up on testnet:
+#   1. publishes the vault code once as a NEAR global contract (by hash),
+#   2. deploys the factory (pb-factory.testnet) pointing at that code,
+#   3. registers vaults made before the factory existed,
+#   4. creates a vault through the factory exactly as a new user would.
+# pb-ops.testnet is the admin and the drill operator. Its key, the factory's
+# and the demo agent's are derived from the PHISHBOWL_SEED secret.
+on:
+  workflow_dispatch:
+    inputs:
+      publish_code:
+        description: "Publish the vault code as a global contract (needs ~30 NEAR, collected from the faucet)"
+        type: boolean
+        default: true
+      deploy_factory:
+        description: "Deploy or upgrade the factory contract"
+        type: boolean
+        default: true
+      factory_gifts:
+        description: "How many faucet accounts to collect into the factory for free vaults (about 10 NEAR each)"
+        default: "2"
+      register:
+        description: "Existing vaults to record, as owner:vault pairs separated by spaces"
+        default: "wasback.testnet:wasback-vault.testnet"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      OPS: pb-ops.testnet
+      FACTORY: pb-factory.testnet
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            contract
+            factory
+      - name: Build both contracts with cargo-near
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+          (cd contract && cargo near build non-reproducible-wasm)
+          (cd factory && cargo near build non-reproducible-wasm)
+          cp "$(find contract/target/near -name 'drill_vault.wasm' | head -1)" vault.wasm
+          cp "$(find factory/target/near -name 'vault_factory.wasm' | head -1)" factory.wasm
+          ls -l vault.wasm factory.wasm
+          echo "CODE_HASH=$(node ops/keys.mjs hash vault.wasm)" >> "$GITHUB_ENV"
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Keys
+        run: |
+          node ops/keys.mjs env
+          node ops/keys.mjs keychain ops "$OPS"
+          node ops/keys.mjs keychain factory "$FACTORY"
+      - name: Make sure the ops and factory accounts exist
+        run: |
+          for PAIR in "$OPS:$OPS_PUB" "$FACTORY:$FACTORY_PUB"; do
+            ACC=${PAIR%%:*}; PUB=${PAIR#*:}
+            near account view-account-summary "$ACC" network-config testnet now > /dev/null 2>&1 \
+              || near account create-account sponsor-by-faucet-service "$ACC" \
+                   use-manually-provided-public-key "$PUB" network-config testnet create
+          done
+          sleep 3
+
+      # Collect faucet NEAR: each throwaway account gets ~10 NEAR and passes 9.9 on.
+      - name: Collect NEAR for publishing the code
+        if: inputs.publish_code
+        run: |
+          for i in 1 2 3 4; do
+            GIFT="pb-gift-${GITHUB_RUN_ID}-ops-$i.testnet"
+            near account create-account sponsor-by-faucet-service "$GIFT" \
+              autogenerate-new-keypair save-to-legacy-keychain network-config testnet create > /dev/null 2>&1 || { echo "faucet refused gift $i"; continue; }
+            sleep 2
+            near tokens "$GIFT" send-near "$OPS" '9.9 NEAR' network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "transferred|rror"
+          done
+          near account view-account-summary "$OPS" network-config testnet now | grep -i balance
+      - name: Publish the vault code as a global contract
+        if: inputs.publish_code
+        run: |
+          echo "Code hash $CODE_HASH"
+          near contract deploy-as-global use-file vault.wasm as-global-hash "$OPS" \
+            network-config testnet sign-with-legacy-keychain send 2>&1 | tail -15
+          echo "- Vault code published as global contract \`$CODE_HASH\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fund the factory for free first vaults
+        run: |
+          for i in $(seq 1 "${{ inputs.factory_gifts }}"); do
+            GIFT="pb-gift-${GITHUB_RUN_ID}-f-$i.testnet"
+            near account create-account sponsor-by-faucet-service "$GIFT" \
+              autogenerate-new-keypair save-to-legacy-keychain network-config testnet create > /dev/null 2>&1 || { echo "faucet refused gift $i"; continue; }
+            sleep 2
+            near tokens "$GIFT" send-near "$FACTORY" '9.9 NEAR' network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "transferred|rror"
+          done
+      - name: Deploy or upgrade the factory
+        if: inputs.deploy_factory
+        run: |
+          CONFIG=$(node -e 'console.log(JSON.stringify({config:{
+            admin_id: process.env.OPS,
+            vault_code_hash: process.env.CODE_HASH,
+            drill_operator_id: process.env.OPS,
+            demo_agent_key: process.env.AGENT_PUB,
+            vault_funding: "1000000000000000000000000",
+            agent_funding: "300000000000000000000000"}}))')
+          if near contract call-function as-read-only "$FACTORY" get_config json-args '{}' network-config testnet now > cfg.log 2>&1; then
+            echo "Factory already running; upgrading its code and config"
+            near contract deploy "$FACTORY" use-file factory.wasm without-init-call \
+              network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "deployed|rror"
+            near contract call-function as-transaction "$FACTORY" set_config json-args "$CONFIG" \
+              prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' sign-as "$OPS" \
+              network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "succeeded|rror"
+          else
+            near contract deploy "$FACTORY" use-file factory.wasm with-init-call new json-args "$CONFIG" \
+              prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
+              network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "deployed|succeeded|rror"
+          fi
+      - name: Register vaults made before the factory
+        run: |
+          for PAIR in ${{ inputs.register }}; do
+            near contract call-function as-transaction "$FACTORY" register \
+              json-args "{\"owner_id\":\"${PAIR%%:*}\",\"vault_id\":\"${PAIR#*:}\"}" \
+              prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' sign-as "$OPS" \
+              network-config testnet sign-with-legacy-keychain send 2>&1 | grep -E "succeeded|rror"
+          done
+
+      - name: A new user signs up through the factory
+        run: |
+          USER_ACC="pb-newuser-${GITHUB_RUN_ID}.testnet"
+          NAME="smoke-${GITHUB_RUN_ID: -6}"
+          near account create-account sponsor-by-faucet-service "$USER_ACC" \
+            autogenerate-new-keypair save-to-legacy-keychain network-config testnet create > /dev/null
+          sleep 3
+          near contract call-function as-transaction "$FACTORY" create_vault json-args "{\"name\":\"$NAME\"}" \
+            prepaid-gas '300.0 Tgas' attached-deposit '0 NEAR' sign-as "$USER_ACC" \
+            network-config testnet sign-with-legacy-keychain send 2>&1 | tee create.log | grep -E "vault_created|agent_created|message|rror"
+          grep -q '"vault_created": true' create.log
+          sleep 2
+          near contract call-function as-read-only "$NAME.$FACTORY" get_status json-args '{}' network-config testnet now \
+            | grep -E '"(owner_id|agent_id|drill_operator_id|score|available_balance)"'
+          near account list-keys "$NAME-agent.$FACTORY" network-config testnet now
+          near contract call-function as-read-only "$FACTORY" get_vaults json-args "{\"owner_id\":\"$USER_ACC\"}" network-config testnet now
+          {
+            echo "### New user test"
+            echo "- $USER_ACC created https://testnet.nearblocks.io/address/$NAME.$FACTORY"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Factory status
+        if: always()
+        run: |
+          near account view-account-summary "$FACTORY" network-config testnet now | grep -i balance || true
+          near contract call-function as-read-only "$FACTORY" vault_count json-args '{}' network-config testnet now || true
