@@ -106,16 +106,20 @@ jobs:
       - name: Plant the scam drill
         if: steps.ai.outputs.ok == 'true'
         run: |
-          node ops/keys.mjs keychain vault "$VAULT"
+          # Drills are signed by the vault's drill operator: the vault itself, or
+          # pb-ops.testnet for vaults made by the factory.
+          OPERATOR=$(near contract call-function as-read-only "$VAULT" get_status json-args '{}' network-config testnet now 2>/dev/null \
+            | grep -oE '"drill_operator_id": "[^"]+"' | cut -d'"' -f4)
+          if [ "$OPERATOR" = "pb-ops.testnet" ]; then node ops/keys.mjs keychain ops "$OPERATOR"; else node ops/keys.mjs keychain vault "$OPERATOR"; fi
           # Settle drills whose time ran out, so a decoy can be used again.
           near contract call-function as-transaction "$VAULT" close_expired_drills json-args '{}' \
             prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
-            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send
+            sign-as "$OPERATOR" network-config testnet sign-with-legacy-keychain send
           HASH=$(printf '%s' "$DECOY" | openssl dgst -sha256 -binary | base64)
           ARGS=$(node -e 'console.log(JSON.stringify({decoy_hash:process.argv[1],lure:process.env.LURE,duration_minutes:120}))' "$HASH")
           near contract call-function as-transaction "$VAULT" start_drill json-args "$ARGS" \
             prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
-            sign-as "$VAULT" network-config testnet sign-with-legacy-keychain send \
+            sign-as "$OPERATOR" network-config testnet sign-with-legacy-keychain send \
             || echo "::notice::Couldn't start a new drill; one for this decoy is probably still running"
       - name: Load the agent's vault-only key
         if: steps.ai.outputs.ok == 'true'

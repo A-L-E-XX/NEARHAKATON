@@ -1,0 +1,52 @@
+name: Demo agent
+
+# Phishbowl's demo agent, for vaults created with "Phishbowl's demo agent".
+# Every half hour it looks at every vault the factory made. If a vault uses the
+# demo agent and has nothing waiting for its owner, the agent asks for one
+# payment above its limit, so the owner has something to approve or reject.
+# It signs with the demo agent's vault-only key; no AI is involved here.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  practice:
+    runs-on: ubuntu-latest
+    env:
+      FACTORY: pb-factory.testnet
+      PHISHBOWL_SEED: ${{ secrets.PHISHBOWL_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install NEAR CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Ask for one payment on each quiet demo vault
+        run: |
+          node ops/keys.mjs env
+          json() {
+            local ARGS="${3:-}"; [ -n "$ARGS" ] || ARGS='{}'
+            near contract call-function as-read-only "$1" "$2" json-args "$ARGS" network-config testnet now 2>/dev/null | sed -n '/^[[{]/,$p'
+          }
+          SUPPLIERS=(goldenmill-pb.testnet freshdairy-pb.testnet boxcraft-pb.testnet)
+          MEMOS=("Practice: bulk flour order, above the agent's limit" "Practice: cream for a wedding order, above the agent's limit" "Practice: 300 gift boxes, above the agent's limit")
+          for VAULT in $(json "$FACTORY" list_vaults '{"limit":100}' | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).join(" "))}catch{}})'); do
+            STATUS=$(json "$VAULT" get_status)
+            AGENT=$(printf '%s' "$STATUS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.frozen||j.pending_count>0?"":j.agent_id)})')
+            [ -n "$AGENT" ] || { echo "$VAULT: frozen or already has a payment waiting"; continue; }
+            near account list-keys "$AGENT" network-config testnet now 2>/dev/null | grep -q "${AGENT_PUB#ed25519:}" \
+              || { echo "$VAULT: uses its own agent"; continue; }
+            # Ask for a bit more than the agent's own limit, so the vault holds it for the owner.
+            LIMIT=$(printf '%s' "$STATUS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).agent_max_per_payment))')
+            AMOUNT=$(node -e 'const l=BigInt(process.argv[1]);const min=10n**23n;console.log((l+l/2n>min?l+l/2n:min).toString())' "$LIMIT")
+            i=$((RANDOM % 3))
+            node ops/keys.mjs keychain agent "$AGENT" > /dev/null
+            ARGS=$(node -e 'console.log(JSON.stringify({receiver_id:process.argv[1],amount:process.argv[2],memo:process.argv[3]}))' "${SUPPLIERS[$i]}" "$AMOUNT" "${MEMOS[$i]}")
+            near contract call-function as-transaction "$VAULT" propose_payment json-args "$ARGS" \
+              prepaid-gas '50.0 Tgas' attached-deposit '0 NEAR' \
+              sign-as "$AGENT" network-config testnet sign-with-legacy-keychain send 2>&1 | grep -oE '"outcome": "[A-Za-z]+"' | sed "s/^/$VAULT: /"
+          done
