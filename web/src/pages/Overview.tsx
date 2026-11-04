@@ -1,4 +1,4 @@
-import { CirclePause, Clock, Network } from "lucide-react";
+import { CirclePause, Clock, Lock, Network } from "lucide-react";
 import { useNearWallet } from "near-connect-hooks";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -346,6 +346,18 @@ function EmergencyPause({ loaded }: { loaded: Loaded[] }) {
     }
     setBusy(false);
     setOpen(false);
+  }
+
+  const ownsAny = loaded.some((s) => s.data.status.owner_id === signedAccountId);
+  if (!ownsAny) {
+    return (
+      <span title="Only a vault's owner can pause it" className="inline-flex">
+        <Button variant="danger" disabled aria-label="Owner only: Emergency pause">
+          <Lock size={14} aria-hidden="true" />
+          Emergency pause
+        </Button>
+      </span>
+    );
   }
 
   return (
