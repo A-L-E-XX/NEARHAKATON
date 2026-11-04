@@ -3,7 +3,7 @@
 // storing private keys anywhere. No dependencies: Node's built-in ed25519.
 //
 //   node ops/keys.mjs env                    public keys -> $GITHUB_ENV, private keys masked
-//   node ops/keys.mjs keychain vault ACCOUNT write ACCOUNT's legacy NEAR CLI key file
+//   node ops/keys.mjs keychain LABEL ACCOUNT  write ACCOUNT's legacy NEAR CLI key file (vault|agent|ops|factory)
 //   node ops/keys.mjs agent-env              PHISHBOWL_AGENT_KEY -> $GITHUB_ENV, masked
 //   node ops/keys.mjs selftest               check the derivation with a dummy secret
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
@@ -67,10 +67,21 @@ if (command === "env") {
   const agent = keyPair(secret, "agent");
   console.log(`::add-mask::${vault.secretKey}`);
   console.log(`::add-mask::${agent.secretKey}`);
-  toEnv([`VAULT_PUB=${vault.publicKey}`, `AGENT_PUB=${agent.publicKey}`]);
+  const ops = keyPair(secret, "ops");
+  const factory = keyPair(secret, "factory");
+  console.log(`::add-mask::${ops.secretKey}`);
+  console.log(`::add-mask::${factory.secretKey}`);
+  toEnv([
+    `VAULT_PUB=${vault.publicKey}`,
+    `AGENT_PUB=${agent.publicKey}`,
+    `OPS_PUB=${ops.publicKey}`,
+    `FACTORY_PUB=${factory.publicKey}`,
+  ]);
   console.log(`Vault key ${vault.publicKey}\nAgent key ${agent.publicKey}`);
 } else if (command === "keychain") {
-  if (!["vault", "agent"].includes(label) || !account) throw new Error("usage: keychain vault|agent ACCOUNT");
+  if (!["vault", "agent", "ops", "factory"].includes(label) || !account) {
+    throw new Error("usage: keychain vault|agent|ops|factory ACCOUNT");
+  }
   const pair = keyPair(secretFromEnv(), label);
   console.log(`::add-mask::${pair.secretKey}`);
   const dir = join(homedir(), ".near-credentials", "testnet");
