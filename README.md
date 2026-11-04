@@ -51,6 +51,8 @@ Other things that cost points: paying a blocklisted account (-15), a payment the
 - **Function-call access keys.** The agent's key can only call `propose_payment`, `report_scam` and `freeze` on the vault. Even if the agent's server is hacked, that key cannot transfer NEAR or call any other contract.
 - **Sub-accounts and named accounts.** The vault lives at a readable sub-account such as `vault.yourname.testnet`, and the allowlist and blocklist use readable names.
 - **1 yoctoNEAR confirmations** for every owner action that loosens the rules (see above).
+- **Global contracts.** The vault code is published once on NEAR by its hash, and every vault the factory makes points at it, so a new vault costs well under 1 NEAR.
+- **Factory sub-accounts.** `pb-factory.testnet` creates `<name>.pb-factory.testnet` and `<name>-agent.pb-factory.testnet` in one transaction, adding the agent's vault-only key as it goes.
 - **NEP-297 events.** Every decision is logged as `EVENT_JSON` with the standard `drillvault`, so dashboards and indexers can follow along.
 - **NEAR AI Cloud.** The agent's brain is an open model running inside a TEE on NEAR AI Cloud. Every answer is signed inside the TEE, and each payment memo carries the answer's id (`ai:<chat id>`) so its signature can be checked later.
 
@@ -64,7 +66,8 @@ The agent works as the accounts-payable assistant for **Brightside Bakery**, a m
 |---|---|---|
 | `contract/` | Rust smart contract (near-sdk 5) and its unit tests | Done, live-tested on testnet |
 | `agent/` | Accounts-payable AI agent (TypeScript, NEAR AI Cloud, near-api-js) | First version, tests pass |
-| `web/` | Security dashboard for vault owners (Vite, React, Tailwind, Recharts, NEAR Connect). Every number is read live from NEAR testnet. | Second version |
+| `factory/` | Rust contract that creates a vault and a vault-only agent account for any wallet, and records who owns which vault | Live on testnet, 13 tests |
+| `web/` | Security dashboard (Vite, React, Tailwind, Recharts, NEAR Connect): welcome page, labelled demo, and each wallet's own vaults. Every number is read live from NEAR testnet. | Live |
 
 ## Try it
 
@@ -114,29 +117,33 @@ You should see `target/near/drill_vault.wasm`. GitHub Actions builds the same fi
 
 GitHub Actions already does this on every change to the contract: it creates a throwaway testnet account, deploys the vault, sends a small payment (result: `Sent`), plants a drill and has the agent pay the decoy (result: `DrillFailed`, and `get_status` shows `"frozen": true`). The run summary links to the live test vault on NearBlocks.
 
-### Open the dashboard
+### Look around in the demo (no wallet needed)
 
-Open https://a-l-e-xx.github.io/NEARHAKATON/. No wallet is needed to look around. To run it yourself instead, you need Node.js 22:
+Open https://a-l-e-xx.github.io/NEARHAKATON/ and choose **See the live demo**. A banner marks it as the demo: sample vaults on NEAR testnet (the bakery's agent, three model-league agents, and the vault our automated test froze). Every number is read live from the chain; only the vaults' owners can act, so owner buttons are shown locked. Then try:
 
-```bash
-cd web
-npm install --legacy-peer-deps
-npm run dev
-```
+- **Overview**: totals, a 14-day payment chart, threats by severity, and the latest decisions.
+- **Threat Detection**: the failed "Fake refund email" drill is listed as Critical. Click it for what happened and what to do.
+- **Transaction Monitor**: payments that were *Completed*, *Approved* by the owner's wallet, *Rejected*, *Blocked* by a drill, or still *Pending*. Click a row for the full record.
+- **Wallet Security**: the agent accounts' real keys, read from NEAR. The bakery's agent shows *Limited to the vault*; the old test agent shows a full-access warning.
+- **Security Audit**: every decision, with who made it. *Export CSV* downloads it.
 
-Either way, you should see the Overview page reading the CI test vault from NEAR testnet: the vault is **Paused** (frozen), the agent's score is 20, and the activity feed shows a 0.01 NEAR payment followed by the failed "Fake refund email" drill. Then try:
+To run the site yourself instead, you need Node.js 22: `cd web && npm install --legacy-peer-deps && npm run dev`.
 
-- **Threat Detection**: the failed drill is listed as Critical, with what happened and what to do next. Click it to see the details.
-- **Transaction Monitor**: the 0.01 NEAR payment is *Completed* and the payment to the decoy is *Blocked*. Click a row for the full record.
-- **Wallet Security**: the page reads the agent account's real keys from NEAR. The CI agent uses a full-access key, so you'll see a warning; a properly set-up agent shows *Limited to the vault*.
-- **Security Audit**: every decision the vault made, with who did it. *Export CSV* downloads it.
-- **Settings**: add any other vault by its account name.
+### Create your own vault from the website
 
-Owner actions (approve, reject, unfreeze, change limits, allow or block accounts, withdraw) open your NEAR wallet through NEAR Connect. They only work for the vault's owner, and the dashboard says so before asking your wallet.
+You need a NEAR testnet wallet such as Meteor or Intear, with a little testnet NEAR for the network fee.
 
-### Run your own vault
+1. Open the site and choose **Connect wallet**. A wallet that owns no vault goes straight to **Create your first vault**.
+2. Pick a name, keep **Phishbowl's demo agent**, and keep or change the limits. Choose **Create vault** and approve the call in your wallet.
+3. You should land on your own dashboard showing only your vault, with about 1 NEAR in it, score 30, level Learner, and an agent key *Limited to the vault*. Your first vault is paid for by the factory.
+4. Within half an hour the demo agent asks your vault for a payment above its limit. It shows up under the bell and in **Transaction Monitor > Pending**. Approve or reject it; your wallet asks you to confirm.
+5. Try the same buttons while signed in with a different wallet: the site locks them, and the vault refuses such calls on chain with "Only the owner can do this".
 
-You need [NEAR CLI](https://github.com/near/near-cli-rs), a testnet wallet account (`you.testnet` below), and `drill_vault.wasm` (see "Build the contract"; copy it out of `contract/target/near/`).
+Behind the button, the **factory** contract (`pb-factory.testnet`, in `factory/`) creates `<name>.pb-factory.testnet` running the vault code, which is published once on NEAR as a global contract, and `<name>-agent.pb-factory.testnet`, whose only key can call that vault. It records which wallet owns which vault, which is how the site finds yours.
+
+### Run your own vault with NEAR CLI
+
+The website is the easy way. To do it by hand, you need [NEAR CLI](https://github.com/near/near-cli-rs), a testnet wallet account (`you.testnet` below), and `drill_vault.wasm` (see "Build the contract"; copy it out of `contract/target/near/`).
 
 1. Create accounts for the vault and for your agent. The testnet faucet pays for them.
 
