@@ -368,3 +368,20 @@ fn amounts_read_like_people_write_them() {
         "less than 0.0001 NEAR"
     );
 }
+
+// -------------------------------------------------------------- set up
+
+#[test]
+fn the_account_that_created_the_vault_can_set_it_up() {
+    // A factory at "testnet" creates "vault.testnet" and initialises it in the same step.
+    set_caller(acc("testnet"), 0, START);
+    let vault = DrillVault::new(owner(), agent(), None, None, None);
+    assert_eq!(vault.get_status().owner_id, owner());
+}
+
+#[test]
+#[should_panic(expected = "Only the vault account or the account that created it can set it up")]
+fn a_stranger_cannot_set_up_a_vault() {
+    set_caller(acc("lt.testnet"), 0, START);
+    DrillVault::new(owner(), agent(), None, None, None);
+}

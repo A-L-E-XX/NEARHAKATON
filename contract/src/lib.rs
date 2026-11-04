@@ -313,8 +313,10 @@ pub struct DrillVault {
 impl DrillVault {
     /// Set up the vault. `drill_operator_id` defaults to the owner, and
     /// `start_score` defaults to 30, so a new agent starts as a learner.
+    ///
+    /// Only the vault account itself or the account that created it (such as
+    /// the Phishbowl factory) can do this, and only once.
     #[init]
-    #[private]
     pub fn new(
         owner_id: AccountId,
         agent_id: AccountId,
@@ -322,6 +324,12 @@ impl DrillVault {
         policy: Option<Policy>,
         start_score: Option<u32>,
     ) -> Self {
+        let caller = env::predecessor_account_id();
+        let vault = env::current_account_id();
+        require!(
+            caller == vault || vault.as_str().strip_suffix(caller.as_str()).is_some_and(|rest| rest.ends_with('.')),
+            "Only the vault account or the account that created it can set it up"
+        );
         let policy = policy.unwrap_or_default();
         Self::check_policy(&policy);
         let score = start_score.unwrap_or(DEFAULT_START_SCORE);
