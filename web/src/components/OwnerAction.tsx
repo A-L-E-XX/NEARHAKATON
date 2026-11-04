@@ -1,4 +1,5 @@
 import { useNearWallet } from "near-connect-hooks";
+import { Lock } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import { useVaults } from "../lib/store";
 import { Button, Modal, useToast } from "./ui";
@@ -94,6 +95,19 @@ export function OwnerAction({
     const ok = await call(vaultId, method, args, { deposit, gas, done });
     setBusy(false);
     if (ok) setOpen(false);
+  }
+
+  // On a vault you don't own (the demo), the button stays visible so you can see
+  // what an owner can do, but it can't be used.
+  if (!isOwner) {
+    return (
+      <span title={`Only the owner, ${ownerId}, can do this`} className="inline-flex">
+        <Button variant={variant} size={size} disabled aria-label={`Owner only: ${typeof label === "string" ? label : confirmTitle}`}>
+          <Lock size={13} aria-hidden="true" />
+          {label}
+        </Button>
+      </span>
+    );
   }
 
   return (

@@ -8,26 +8,28 @@ import { useVaults } from "../lib/store";
 const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_8.5rem_9.5rem_7.5rem_minmax(0,1fr)_5rem_6.5rem_1rem]";
 
 export function Agents() {
-  const { snapshots } = useVaults();
+  const { snapshots, mode } = useVaults();
   return (
     <>
       <PageHeader
         title="AI Agents"
         description="Each agent pays from its own Phishbowl vault on NEAR. The agent can only ask; the vault decides, and its limits follow the agent's score."
         actions={
+          mode === "mine" && (
           <a
-            href="#/start"
+            href="#/create"
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-snow px-4 text-sm font-semibold text-night hover:bg-white"
           >
             <Plus size={16} />
-            Register an agent
+            New vault and agent
           </a>
+          )
         }
       />
 
       {snapshots.length === 0 ? (
         <Empty title="No agents yet">
-          <a className="underline" href="#/start">
+          <a className="underline" href="#/create">
             Register your first agent
           </a>{" "}
           or add an existing vault in Settings.

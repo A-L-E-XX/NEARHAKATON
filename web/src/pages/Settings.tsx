@@ -2,35 +2,43 @@ import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useNearWallet } from "near-connect-hooks";
 import { useState, type FormEvent } from "react";
 import { Badge, Button, Field, PageHeader, Panel, agentName, useToast } from "../components/ui";
-import { DEFAULT_VAULTS, EXPLORER, NETWORK_LABEL, REFRESH_MS, RPC_URL } from "../config";
+import { EXPLORER, FACTORY_ID, NETWORK_LABEL, REFRESH_MS, RPC_URL } from "../config";
 import { ago } from "../lib/format";
-import { isAccountId } from "../lib/near";
+import { isAccountId, view } from "../lib/near";
 import { useVaults } from "../lib/store";
 
-const LOCAL_KEYS = ["phishbowl.vaults", "phishbowl.seen", "phishbowl.sidebar.collapsed"];
+const LOCAL_KEYS = ["phishbowl.demo", "phishbowl.extra-vaults", "phishbowl.seen", "phishbowl.sidebar.collapsed"];
 
 export function Settings() {
-  const { watched, snapshots, addVault, removeVault, refresh } = useVaults();
-  const { signedAccountId, signIn, signOut, loading } = useNearWallet();
+  const { mode, account, watched, snapshots, addVault, removeVault, refresh } = useVaults();
+  const { signIn, signOut, loading } = useNearWallet();
   const toast = useToast();
   const [draft, setDraft] = useState("");
+  const [checking, setChecking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const value = draft.trim().toLowerCase();
   const valid = isAccountId(value);
   const duplicate = watched.includes(value);
 
-  function onAdd(event: FormEvent) {
+  // A vault made outside the factory (for example with NEAR CLI) can be added,
+  // but only if this wallet really owns it.
+  async function onAdd(event: FormEvent) {
     event.preventDefault();
-    if (!valid || duplicate) return;
-    addVault(value);
-    setDraft("");
-    toast({ tone: "brand", text: `Watching ${value}. Reading it from ${NETWORK_LABEL}.` });
-  }
-
-  function resetDefaults() {
-    for (const id of watched) if (!DEFAULT_VAULTS.includes(id)) removeVault(id);
-    for (const id of DEFAULT_VAULTS) addVault(id);
-    toast({ tone: "neutral", text: "Back to the default vault list." });
+    if (!valid || duplicate || !account) return;
+    setChecking(true);
+    try {
+      const status = await view<{ owner_id: string }>(value, "get_status");
+      if (status.owner_id !== account) {
+        toast({ tone: "caution", text: `${value} belongs to ${status.owner_id}, not to you.` });
+      } else {
+        addVault(value);
+        setDraft("");
+        toast({ tone: "brand", text: `Added ${value}.` });
+      }
+    } catch {
+      toast({ tone: "danger", text: `${value} isn't a Phishbowl vault on ${NETWORK_LABEL}.` });
+    }
+    setChecking(false);
   }
 
   function clearBrowser() {
@@ -44,25 +52,34 @@ export function Settings() {
 
   return (
     <>
-      <PageHeader title="Settings" description="Choose which vaults this dashboard watches. These settings stay in this browser." />
+      <PageHeader title="Settings" description={mode === "demo" ? "You're viewing the demo." : `Signed in as ${account}.`} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <Panel title="Watched vaults" description="Any Phishbowl vault on NEAR testnet. Watching is read-only and needs no wallet.">
+        <Panel
+          title={mode === "demo" ? "Vaults in the demo" : "Your vaults"}
+          description={
+            mode === "demo"
+              ? "Sample vaults on NEAR testnet. You can look at everything; only their owners can act."
+              : `Vaults ${account} owns, found through the Phishbowl factory (${FACTORY_ID}).`
+          }
+        >
           {watched.length === 0 ? (
-            <p className="mb-4 text-[13px] text-fog">No vaults yet. Add one below.</p>
+            <p className="mb-4 text-[13px] text-fog">
+              No vaults yet.{" "}
+              <a className="text-water underline" href="#/create">
+                Create one
+              </a>
+              .
+            </p>
           ) : (
             <ul className="mb-4 divide-y divide-edge rounded-lg border border-edge">
               {watched.map((id) => {
                 const snap = snapshots.find((s) => s.id === id);
-                const owner = snap?.data?.status.owner_id;
                 return (
                   <li key={id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-[13px]">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-snow">{agentName(id)}</span>
-                      <span className="block truncate text-[12px] text-fog">
-                        {id}
-                        {owner && signedAccountId === owner ? ", you own it" : ""}
-                      </span>
+                      <span className="block truncate text-[12px] text-fog">{id}</span>
                     </span>
                     {snap?.data ? (
                       <Badge tone="secure">Reading</Badge>
@@ -71,17 +88,11 @@ export function Settings() {
                     ) : (
                       <Badge tone="neutral">Loading</Badge>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`Stop watching ${id}`}
-                      onClick={() => {
-                        removeVault(id);
-                        toast({ tone: "neutral", text: `Stopped watching ${id}. Nothing changed on NEAR.` });
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
+                    {mode === "mine" && !id.endsWith(`.${FACTORY_ID}`) && (
+                      <Button variant="ghost" size="sm" aria-label={`Remove ${id} from this list`} onClick={() => removeVault(id)}>
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
                     {snap?.error && <p className="basis-full text-[12px] text-danger">{snap.error}</p>}
                   </li>
                 );
@@ -89,28 +100,30 @@ export function Settings() {
             </ul>
           )}
 
-          <form onSubmit={onAdd} className="flex flex-wrap items-start gap-2">
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">Vault account</span>
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="vault-name.testnet"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                className="h-10 w-full rounded-lg border border-edge bg-raised px-3 text-sm focus:border-water/60 focus:outline-none"
-              />
-              {value && !valid && <span className="mt-1 block text-[12px] text-caution">That isn't a valid NEAR account name.</span>}
-              {duplicate && <span className="mt-1 block text-[12px] text-fog">Already watching it.</span>}
-            </label>
-            <Button type="submit" variant="primary" disabled={!valid || duplicate}>
-              <Plus size={15} /> Watch vault
-            </Button>
-          </form>
-          <button type="button" onClick={resetDefaults} className="mt-4 text-[13px] text-fog underline hover:text-snow">
-            Reset to the default list
-          </button>
+          {mode === "mine" && (
+            <form onSubmit={onAdd}>
+              <p className="mb-2 text-[13px] text-fog">Made a vault some other way, such as with NEAR CLI? Add it here.</p>
+              <div className="flex flex-wrap items-start gap-2">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">Vault account</span>
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="vault-name.testnet"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="h-10 w-full rounded-lg border border-edge bg-raised px-3 text-sm focus:border-water/60 focus:outline-none"
+                  />
+                  {value && !valid && <span className="mt-1 block text-[12px] text-caution">That isn't a valid NEAR account name.</span>}
+                  {duplicate && <span className="mt-1 block text-[12px] text-fog">Already in your list.</span>}
+                </label>
+                <Button type="submit" disabled={!valid || duplicate || checking}>
+                  <Plus size={15} /> {checking ? "Checking" : "Add"}
+                </Button>
+              </div>
+            </form>
+          )}
         </Panel>
 
         <div className="space-y-5">
@@ -147,11 +160,11 @@ export function Settings() {
           </Panel>
 
           <Panel title="Wallet">
-            {signedAccountId ? (
+            {account ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="min-w-0 text-[13px]">
                   <span className="block text-fog">Connected as</span>
-                  <span className="block truncate text-snow">{signedAccountId}</span>
+                  <span className="block truncate text-snow">{account}</span>
                 </p>
                 <Button size="sm" onClick={() => void signOut()}>
                   Disconnect
@@ -159,7 +172,7 @@ export function Settings() {
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[13px] text-fog">Connect a wallet to act as the owner of a vault.</p>
+                <p className="text-[13px] text-fog">Connect a wallet to see and manage your own vaults.</p>
                 <Button size="sm" variant="primary" disabled={loading} onClick={() => void signIn()}>
                   Connect wallet
                 </Button>
@@ -169,8 +182,9 @@ export function Settings() {
 
           <Panel title="This browser">
             <p className="text-[13px] text-fog">
-              Phishbowl itself keeps three things in this browser: the vaults you watch, which alerts you've read, and whether
-              the sidebar is collapsed. Your wallet session is kept by NEAR Connect and your wallet, not by Phishbowl.
+              Phishbowl itself keeps a few things in this browser: whether you're in the demo, vaults you added by hand,
+              which alerts you've read, and whether the sidebar is collapsed. Your wallet session is kept by NEAR Connect
+              and your wallet, not by Phishbowl.
             </p>
             <Button className="mt-4" size="sm" onClick={clearBrowser}>
               Clear saved settings

@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { Tone } from "../lib/derive";
 import { useVaults } from "../lib/store";
-import { AGENT_NAMES } from "../config";
+import { AGENT_NAMES, FACTORY_ID } from "../config";
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -167,7 +167,15 @@ export function ErrorNote({ children }: { children: ReactNode }) {
 }
 
 export function agentName(vaultId: string): string {
-  return AGENT_NAMES[vaultId]?.name ?? vaultId;
+  const known = AGENT_NAMES[vaultId]?.name;
+  if (known) return known;
+  // Vaults from the factory are "<name>.pb-factory.testnet": show "Name agent".
+  const suffix = `.${FACTORY_ID}`;
+  if (vaultId.endsWith(suffix)) {
+    const words = vaultId.slice(0, -suffix.length).split("-");
+    return `${words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")} agent`;
+  }
+  return vaultId;
 }
 
 /** Lets pages that work on one vault pick which one, when more than one is watched. */

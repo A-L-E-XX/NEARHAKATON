@@ -6,11 +6,18 @@ export const RPC_FALLBACKS = ["https://rpc.testnet.near.org"];
 export const EXPLORER = "https://testnet.nearblocks.io";
 export const GITHUB_URL = "https://github.com/A-L-E-XX/NEARHAKATON";
 
+/** Creates vaults for new users and records which wallet owns which vault. */
+export const FACTORY_ID = "pb-factory.testnet";
+
 /**
- * Vaults shown when someone opens the site for the first time. Set VITE_VAULTS
- * (comma separated) when building to change them. People can add more in Settings.
+ * The read-only demo: the sample bakery's vault, the three model-league vaults
+ * and the vault the automated tests froze. Set VITE_DEMO_VAULTS (comma
+ * separated) when building to change them.
  */
-export const DEFAULT_VAULTS: string[] = (import.meta.env.VITE_VAULTS || "wasback-vault.testnet,pb-league-deepseek.testnet,pb-league-qwen.testnet,pb-league-glm.testnet,phishbowl-ci-41456407509-1.testnet")
+export const DEMO_VAULTS: string[] = (
+  import.meta.env.VITE_DEMO_VAULTS ||
+  "wasback-vault.testnet,pb-league-deepseek.testnet,pb-league-qwen.testnet,pb-league-glm.testnet,phishbowl-ci-41456407509-1.testnet"
+)
   .split(",")
   .map((id: string) => id.trim())
   .filter(Boolean);

@@ -8,7 +8,10 @@ const desktop = { width: 1440, height: 900 };
 const mobile = { width: 390, height: 844 };
 const vault = "wasback-vault.testnet";
 
+// Every shot except the welcome page is taken in demo mode (no wallet in CI).
 const shots = [
+  { name: "00-welcome", hash: "#/", ...desktop, welcome: true },
+  { name: "00-welcome-mobile", hash: "#/", ...mobile, welcome: true },
   { name: "01-overview", hash: "#/overview", ...desktop },
   { name: "02-agents", hash: "#/agents", ...desktop },
   { name: "03-agent-detail", hash: `#/agents/${vault}`, ...desktop },
@@ -25,8 +28,7 @@ const shots = [
   { name: "14-overview-mobile", hash: "#/overview", ...mobile },
   { name: "15-threats-mobile", hash: "#/threats", ...mobile },
   { name: "16-audit-mobile", hash: "#/audit", ...mobile },
-  { name: "17-connect-desktop", hash: "#/overview", ...desktop, click: "header button:has-text('Connect wallet')", wait: 4000 },
-  { name: "18-connect-mobile", hash: "#/overview", ...mobile, click: "header button[aria-label='Connect wallet']", wait: 4000 },
+  { name: "17-connect", hash: "#/", ...desktop, welcome: true, click: "main button:has-text('Connect wallet')", wait: 4000 },
 ];
 
 await mkdir("screenshots", { recursive: true });
@@ -34,15 +36,20 @@ const browser = await chromium.launch();
 
 for (const shot of shots) {
   const page = await browser.newPage({ viewport: { width: shot.width, height: shot.height } });
+  if (!shot.welcome) {
+    await page.addInitScript(() => window.localStorage.setItem("phishbowl.demo", "1"));
+  }
   page.on("console", (message) => {
     if (message.type() === "error") console.log(`[${shot.name}] console error: ${message.text()}`);
   });
   page.on("pageerror", (error) => console.log(`[${shot.name}] page error: ${error.message}`));
 
   await page.goto(base + shot.hash, { waitUntil: "load", timeout: 30_000 });
-  await page
-    .waitForSelector('main[data-ready="true"]', { timeout: 25_000 })
-    .catch(() => console.log(`[${shot.name}] the vault data did not load within 25 seconds`));
+  if (!shot.welcome) {
+    await page
+      .waitForSelector('main[data-ready="true"]', { timeout: 25_000 })
+      .catch(() => console.log(`[${shot.name}] the vault data did not load within 25 seconds`));
+  }
   await page.waitForTimeout(2_500); // let the water finish rising and the charts draw
   if (shot.click) {
     await page

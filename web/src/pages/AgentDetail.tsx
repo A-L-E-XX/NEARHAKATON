@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { Bowl } from "../components/Bowl";
 import { ONE_YOCTO, OwnerAction } from "../components/OwnerAction";
 import { TxTable } from "../components/TxTable";
-import { Badge, Button, ErrorNote, Field, Loading, Panel, agentName } from "../components/ui";
+import { Badge, ErrorNote, Field, Loading, Panel, agentName } from "../components/ui";
 import { EXPLORER, NETWORK_LABEL } from "../config";
 import { actorOf, agentState, keyCheck, lastAgentActivity, transactionsFor } from "../lib/derive";
 import { ago, near, shortKey } from "../lib/format";
@@ -11,7 +11,7 @@ import { useVaults } from "../lib/store";
 import type { VaultData } from "../lib/vault";
 
 export function AgentDetail({ vaultId }: { vaultId: string }) {
-  const { snapshots, watched, addVault, select } = useVaults();
+  const { snapshots, watched, mode, select } = useVaults();
   const snap = snapshots.find((s) => s.id === vaultId);
 
   useEffect(() => {
@@ -29,10 +29,11 @@ export function AgentDetail({ vaultId }: { vaultId: string }) {
       <>
         {back}
         <Panel title={vaultId}>
-          <p className="mb-4 text-sm text-mist">You're not watching this vault yet.</p>
-          <Button variant="primary" onClick={() => addVault(vaultId)}>
-            Watch this vault
-          </Button>
+          <p className="text-sm text-mist">
+            {mode === "demo"
+              ? "This vault isn't part of the demo."
+              : "This vault isn't one of yours, so it isn't shown here. Only a vault's owner sees it in their space; anyone can still check it on NearBlocks."}
+          </p>
         </Panel>
       </>
     );

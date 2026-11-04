@@ -7,8 +7,10 @@ import {
   ChevronsRight,
   LayoutDashboard,
   LogOut,
+  Eye,
   Menu,
   Plug,
+  Plus,
   Rocket,
   ScrollText,
   Search,
@@ -116,8 +118,40 @@ function Brand({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function DemoBanner() {
+  const { mode, account, exitDemo } = useVaults();
+  const { signIn, loading } = useNearWallet();
+  if (mode !== "demo") return null;
+  return (
+    <div className="border-b border-water/30 bg-water/[0.08] px-4 py-2.5 text-[13px] sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-mist">
+          <span className="font-semibold text-water">Demo.</span> You're looking at sample vaults on NEAR testnet: a bakery's
+          agent and three AI models facing the same scams. Everything is live; only their owners can act.
+        </p>
+        <span className="flex shrink-0 gap-2">
+          {account ? (
+            <Button size="sm" variant="primary" onClick={exitDemo}>
+              Back to my vaults
+            </Button>
+          ) : (
+            <>
+              <Button size="sm" variant="primary" disabled={loading} onClick={() => void signIn()}>
+                Connect wallet
+              </Button>
+              <Button size="sm" variant="ghost" onClick={exitDemo}>
+                Exit demo
+              </Button>
+            </>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function Shell({ route, children }: { route: Route; children: ReactNode }) {
-  const { firstLoad } = useVaults();
+  const { firstLoad, mode } = useVaults();
   const [collapsed, setCollapsed] = usePersistentFlag("phishbowl.sidebar.collapsed", false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -128,6 +162,20 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
         <Brand collapsed={collapsed} />
         <NavLinks route={route} collapsed={collapsed} />
         <div className="space-y-0.5 border-t border-edge p-2">
+          {mode === "mine" && (
+            <a
+              href="#/create"
+              title={collapsed ? "New vault" : undefined}
+              className={cx(
+                "flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] text-fog hover:bg-white/[0.03] hover:text-snow",
+                collapsed && "justify-center px-0",
+                route.page === "create" && "bg-white/[0.07] text-snow",
+              )}
+            >
+              <Plus size={18} />
+              {!collapsed && "New vault"}
+            </a>
+          )}
           <a
             href="#/start"
             title={collapsed ? "Get started" : undefined}
@@ -175,6 +223,7 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenu={() => setMobileOpen(true)} />
+        <DemoBanner />
         <main
           data-ready={firstLoad ? "false" : "true"}
           className="mx-auto w-full max-w-[1320px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
@@ -351,7 +400,7 @@ function GlobalSearch() {
       {open && text.trim().length >= 2 && (
         <div className="absolute left-0 right-0 top-11 z-40 overflow-hidden rounded-lg border border-edge bg-raised shadow-2xl shadow-black/50">
           {hits.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-fog">Nothing matches "{text.trim()}" in the watched vaults.</p>
+            <p className="px-4 py-3 text-sm text-fog">Nothing matches "{text.trim()}" in these vaults.</p>
           ) : (
             <ul>
               {hits.map((hit) => (
@@ -490,7 +539,7 @@ function Notifications() {
 
 function AccountMenu() {
   const { signedAccountId, signIn, signOut, loading } = useNearWallet();
-  const { snapshots } = useVaults();
+  const { snapshots, mode, enterDemo, exitDemo } = useVaults();
   const { open, setOpen, ref } = usePopover();
   if (!signedAccountId) {
     return (
@@ -520,13 +569,29 @@ function AccountMenu() {
             <p className="text-[12px] text-fog">Signed in with NEAR wallet</p>
             <p className="truncate text-sm font-semibold">{signedAccountId}</p>
             <p className="mt-1 text-[12px] text-fog">
-              {owned ? `Owner of ${owned} watched vault${owned === 1 ? "" : "s"}.` : "Not the owner of any watched vault."}
+              {mode === "demo"
+                ? "Viewing the demo."
+                : owned
+                  ? `Owner of ${owned} vault${owned === 1 ? "" : "s"}.`
+                  : "You don't own a vault yet."}
             </p>
           </div>
           <button
             type="button"
             onClick={() => {
               setOpen(false);
+              if (mode === "demo") exitDemo();
+              else enterDemo();
+            }}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-mist hover:bg-white/5 hover:text-snow"
+          >
+            <Eye size={15} /> {mode === "demo" ? "Back to my vaults" : "View the demo"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              exitDemo();
               void signOut();
             }}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-mist hover:bg-white/5 hover:text-snow"

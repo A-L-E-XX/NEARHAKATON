@@ -12,7 +12,8 @@ export type Page =
   | "audit"
   | "integrations"
   | "settings"
-  | "start";
+  | "start"
+  | "create";
 
 export interface Route {
   page: Page;
@@ -32,6 +33,7 @@ const PAGES: Page[] = [
   "integrations",
   "settings",
   "start",
+  "create",
 ];
 
 export function parseHash(hash: string): Route {
