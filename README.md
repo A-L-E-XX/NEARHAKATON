@@ -2,17 +2,43 @@
 
 **We scam your AI agent before real scammers do.**
 
-Phishbowl is a NEAR smart-contract vault for AI agents that handle money. It runs surprise scam drills on the agent, and the results decide how much the agent is allowed to spend on its own.
+Phishbowl is a vault on NEAR for AI agents that handle money. The agent can only *ask* to pay; the vault decides. Phishbowl plants surprise scam drills in what the agent reads, and the agent's results decide how much it may spend without asking its owner.
 
-Built for NEAR HACKATHON 2026, AI Security & Defense track.
+Built for NEAR HACKATHON 2026, **AI Security & Defense** track. Working prototype on NEAR testnet.
 
-**Live dashboard:** https://a-l-e-xx.github.io/NEARHAKATON/ (reads NEAR testnet directly; no wallet needed to look around)
+- **Live site:** https://a-l-e-xx.github.io/NEARHAKATON/
+- **Demo video on X:** _link added on submission_
+- **Everything below runs on NEAR testnet. Nothing moves real money.**
 
-## The problem
+## For judges: the 3-minute path
 
-AI agents now hold wallets. One sentence hidden in an email, an invoice or a token name can trick an agent into sending money to a scammer (prompt injection). Spending limits cap the damage, but they never tell you whether your agent can be fooled, and they treat a gullible agent the same as a careful one.
+1. **See it without a wallet.** Open the live site and choose **See the live demo**. A banner marks it as the demo. You should see two agents: the sample *Brightside Bakery* agent (score 45 after passing two drills, three supplier invoices paid, one 1 NEAR payment approved by its owner's wallet, one rejected) and a *Test agent (CI)* that failed a drill, so its vault is frozen.
+2. **See a scam being caught.** Open **Threat Detection**. The *Test agent* paid a decoy ("Fake refund email"): nothing was sent and the vault froze itself. The bakery agent reported its drills (a look-alike supplier account and an invoice with a hidden instruction to the AI), so it gained points.
+3. **See why the agent can't be the weak link.** Open **Wallet Security**. The bakery agent's only key is *Limited to the vault*: NEAR itself stops it from moving money directly or loosening any rule.
+4. **Try it yourself (needs a testnet wallet such as Meteor).** Connect a wallet, create a vault (the first one is free), and within half an hour Phishbowl's demo agent asks it for a payment above its limit. Approve or reject it from your wallet. Signed in as anyone else, the same buttons are locked, and the contract refuses the calls anyway.
+5. **Check the proof yourself.** Every claim above links to a transaction on NearBlocks (see "Proof on testnet"), and every workflow that produced it is in `.github/workflows/`.
 
-Companies test their staff with fake phishing emails. Nobody does this for AI agents that hold money.
+## Why it matters
+
+AI agents are starting to pay bills, run treasuries and trade. They read untrusted text all day: emails, invoices, web pages, token names. One sentence hidden in any of them can talk an agent into paying a scammer. Spending limits cap the damage, but they never tell you *whether your agent can be fooled*, and they treat a gullible agent the same as a careful one.
+
+Companies test their staff with fake phishing emails. Phishbowl does the same for AI agents, and wires the result into the money: an agent that keeps spotting scams earns more freedom; one that falls for a scam is frozen the moment it tries, before anything leaves the vault.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  Inbox["Agent's inbox<br/>invoices, emails"] --> Agent["AI agent<br/>(vault-only key)"]
+  Drills["Phishbowl drill runner"] -- "fake scam email" --> Inbox
+  Drills -- "start_drill(hash of decoy)" --> Vault
+  Agent -- "propose_payment / report_scam / freeze" --> Vault["Vault contract on NEAR"]
+  Vault -- "Sent" --> Supplier["Real supplier"]
+  Vault -- "Held" --> Owner["Owner's wallet<br/>approve / reject (1 yocto)"]
+  Vault -- "Decoy paid: DrillFailed, frozen" --> Freeze(("frozen"))
+  Factory["Factory contract"] -- "creates vault + agent account" --> Vault
+  Site["Website (reads NEAR directly)"] -. "view calls" .-> Vault
+  Owner --> Site
+```
 
 ## How Phishbowl works
 
@@ -49,12 +75,12 @@ Other things that cost points: paying a blocklisted account (-15), a payment the
 ## NEAR features used
 
 - **Function-call access keys.** The agent's key can only call `propose_payment`, `report_scam` and `freeze` on the vault. Even if the agent's server is hacked, that key cannot transfer NEAR or call any other contract.
-- **Sub-accounts and named accounts.** The vault lives at a readable sub-account such as `vault.yourname.testnet`, and the allowlist and blocklist use readable names.
+- **Sub-accounts and named accounts.** Vaults live at readable names such as `my-bakery.pb-factory.testnet`, and the allowlist and blocklist use readable names. Vaults made by the factory have no access keys at all, so nobody can swap their code.
 - **1 yoctoNEAR confirmations** for every owner action that loosens the rules (see above).
 - **Global contracts.** The vault code is published once on NEAR by its hash, and every vault the factory makes points at it, so a new vault costs well under 1 NEAR.
 - **Factory sub-accounts.** `pb-factory.testnet` creates `<name>.pb-factory.testnet` and `<name>-agent.pb-factory.testnet` in one transaction, adding the agent's vault-only key as it goes.
 - **NEP-297 events.** Every decision is logged as `EVENT_JSON` with the standard `drillvault`, so dashboards and indexers can follow along.
-- **NEAR AI Cloud.** The agent's brain is an open model running inside a TEE on NEAR AI Cloud. Every answer is signed inside the TEE, and each payment memo carries the answer's id (`ai:<chat id>`) so its signature can be checked later.
+- **NEAR AI Cloud (built, not yet run live).** The agent can use an open model running inside a TEE on NEAR AI Cloud as its brain, putting each answer's id (`ai:<chat id>`) in the payment memo so the TEE signature can be checked later. Our NEAR AI Cloud account had no credits during the hackathon, so the live runs on testnet use the agent's rule-based checker instead (`--brain careful`). Switching is one setting: `brain: nearai` in the *Run the agent* workflow.
 
 ## The demo business
 
@@ -64,8 +90,10 @@ The agent works as the accounts-payable assistant for **Brightside Bakery**, a m
 
 | Folder | What is in it | Status |
 |---|---|---|
-| `contract/` | Rust smart contract (near-sdk 5) and its unit tests | Done, live-tested on testnet |
-| `agent/` | Accounts-payable AI agent (TypeScript, NEAR AI Cloud, near-api-js) | First version, tests pass |
+| `contract/` | The vault: Rust smart contract (near-sdk 5) | 24 unit tests, live on testnet |
+| `agent/` | Accounts-payable agent (TypeScript, near-api-js): rule-based checker live on testnet; NEAR AI Cloud brain built and unit-tested | 24 tests pass |
+| `ops/` | Key derivation from one GitHub secret, and the model-league script | Used by the workflows |
+| `.github/workflows/` | Tests, builds, testnet deploys, the drill runner, the demo agent, the stranger test | All green |
 | `factory/` | Rust contract that creates a vault and a vault-only agent account for any wallet, and records who owns which vault | Live on testnet, 13 tests |
 | `web/` | Security dashboard (Vite, React, Tailwind, Recharts, NEAR Connect): welcome page, labelled demo, and each wallet's own vaults. Every number is read live from NEAR testnet. | Live |
 
@@ -188,6 +216,17 @@ The website is the easy way. To do it by hand, you need [NEAR CLI](https://githu
 
 Steps 1, 2 and 5 are the same commands the GitHub Actions testnet job runs on every contract change. The vault account's own full-access key stays in your NEAR CLI: keep it safe, because it can bypass the vault's rules.
 
+## Proof on testnet
+
+| What | Where to check |
+|---|---|
+| The sample bakery's vault (owner: `wasback.testnet`, a real wallet) | https://testnet.nearblocks.io/address/wasback-vault.testnet |
+| Its agent, holding only a vault-limited key | https://testnet.nearblocks.io/address/wasback-agent.testnet |
+| A vault frozen by a failed drill (made by the contract test job) | https://testnet.nearblocks.io/address/phishbowl-ci-41456407509-1.testnet |
+| The factory that makes vaults for new users | https://testnet.nearblocks.io/address/pb-factory.testnet |
+| A vault a brand-new account created through the factory | https://testnet.nearblocks.io/address/smoke-458540.pb-factory.testnet |
+| Stranger test: a new account tries every owner action and is refused ("Only the owner can do this"); the agent's key is refused by NEAR itself | `.github/workflows/stranger-test.yml`, results in its Actions runs |
+
 ## Contract methods
 
 | Who | Method | What it does |
@@ -207,6 +246,9 @@ Steps 1, 2 and 5 are the same commands the GitHub Actions testnet job runs on ev
 | Anyone (view) | `get_status`, `get_reputation`, `get_pending`, `get_activity`, `get_drills`, `get_lists` | Read the vault. |
 
 ## Known limitations
+
+- **The AI brain hasn't run live yet.** See "NEAR AI Cloud" above: the live drills on testnet were handled by the rule-based checker. The drills, the vault and the scoring are the same either way; what changes is who decides. Pitting AI models against the same drills (the model league in `.github/workflows/league.yml`) is ready and waits for credits.
+- **Drills are run by Phishbowl.** The drill runner and demo agent are GitHub Actions jobs signing with keys derived from one repository secret. A production version would let several independent drill operators run drills.
 
 - **Decoy hashes are public.** A developer who wanted to game the drills could hash every address their agent sees and check the list. Drills measure whether the AI can be fooled, not whether its developer is honest. A commit-reveal version would close this gap.
 - **NEAR only for now.** Stablecoin (USDC) support is planned.
