@@ -6,6 +6,8 @@ name: Run the agent
 #   bakery - the bakery's demo inbox: real invoices plus the "account changed" scam.
 # The agent signs with its vault-only key; the vault decides every payment.
 # Runs a drill every day on its own, and can be started by hand or by other workflows.
+# The brain is the rule-based checker by default; choose "nearai" to let an AI
+# model on NEAR AI Cloud decide instead (needs NEAR AI Cloud credits).
 on:
   schedule:
     - cron: "41 10 * * *"
@@ -22,6 +24,11 @@ on:
       model:
         description: "NEAR AI Cloud model id (empty = the agent's default)"
         default: ""
+      brain:
+        description: "nearai (an AI model on NEAR AI Cloud; needs credits) or careful (the rule-based checker)"
+        type: choice
+        options: [careful, nearai]
+        default: careful
       vault:
         description: "Vault account"
         default: "wasback-vault.testnet"
@@ -33,6 +40,7 @@ on:
       scenario: { type: string, default: drill }
       drill_id: { type: string, default: "" }
       model: { type: string, default: "" }
+      brain: { type: string, default: "careful" }
       vault: { type: string, required: true }
       agent: { type: string, required: true }
     secrets:
@@ -44,6 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SCENARIO: ${{ inputs.scenario || 'drill' }}
+      BRAIN: ${{ inputs.brain || 'careful' }}
       DRILL_ID: ${{ inputs.drill_id || '' }}
       MODEL: ${{ inputs.model || 'deepseek-ai/DeepSeek-V4.1-Flash-1017' }}
       VAULT: ${{ inputs.vault || 'wasback-vault.testnet' }}
@@ -58,13 +67,18 @@ jobs:
       - name: Check the secrets are set
         run: |
           [ -n "$PHISHBOWL_SEED" ] || { echo "::error::Add the PHISHBOWL_SEED repository secret"; exit 1; }
-          [ -n "$NEAR_AI_API_KEY" ] || { echo "::error::Add the NEAR_AI_API_KEY repository secret"; exit 1; }
+          if [ "$BRAIN" = "nearai" ] && [ -z "$NEAR_AI_API_KEY" ]; then echo "::error::Add the NEAR_AI_API_KEY repository secret"; exit 1; fi
 
       # Plant nothing unless the AI can actually answer: a drill nobody can see
       # would expire as "missed" and wrongly count against the agent.
       - name: Can the AI answer?
         id: ai
         run: |
+          if [ "$BRAIN" != "nearai" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "Using the rule-based checker; no AI call needed."
+            exit 0
+          fi
           CODE=$(curl -sS -o reply.json -w '%{http_code}' https://cloud-api.near.ai/v1/chat/completions \
             -H "Authorization: Bearer $NEAR_AI_API_KEY" -H "Content-Type: application/json" \
             -d "{\"model\":\"$MODEL\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"Say ok\"}]}" || echo 000)
@@ -132,8 +146,8 @@ jobs:
           PHISHBOWL_AGENT_ID: ${{ inputs.agent || 'wasback-agent.testnet' }}
           NEAR_AI_MODEL: ${{ inputs.model || 'deepseek-ai/DeepSeek-V4.1-Flash-1017' }}
         run: |
-          npm run -s agent -- --inbox ../inbox 2>&1 | tee run.log
-          { echo "### $SCENARIO run with $NEAR_AI_MODEL"; echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          npm run -s agent -- --brain "$BRAIN" --inbox ../inbox 2>&1 | tee run.log
+          { echo "### $SCENARIO run, brain: $BRAIN"; echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: steps.ai.outputs.ok == 'true'
         with:

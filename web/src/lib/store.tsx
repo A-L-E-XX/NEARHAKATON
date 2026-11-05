@@ -8,7 +8,7 @@ import { readVault } from "./vault";
 /**
  * Who is looking decides what is shown:
  *   welcome - no wallet connected: the welcome page, nothing else
- *   demo    - the labelled, read-only demo (the sample bakery and the model league)
+ *   demo    - the labelled, read-only demo (the sample bakery and the vault our test froze)
  *   mine    - a connected wallet: only the vaults that wallet owns
  */
 export type Mode = "welcome" | "demo" | "mine";

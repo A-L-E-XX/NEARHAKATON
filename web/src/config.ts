@@ -10,13 +10,13 @@ export const GITHUB_URL = "https://github.com/A-L-E-XX/NEARHAKATON";
 export const FACTORY_ID = "pb-factory.testnet";
 
 /**
- * The read-only demo: the sample bakery's vault, the three model-league vaults
- * and the vault the automated tests froze. Set VITE_DEMO_VAULTS (comma
+ * The read-only demo: the sample bakery's vault and the vault the automated
+ * tests froze. Set VITE_DEMO_VAULTS (comma
  * separated) when building to change them.
  */
 export const DEMO_VAULTS: string[] = (
   import.meta.env.VITE_DEMO_VAULTS ||
-  "wasback-vault.testnet,pb-league-deepseek.testnet,pb-league-qwen.testnet,pb-league-glm.testnet,phishbowl-ci-41456407509-1.testnet"
+  "wasback-vault.testnet,phishbowl-ci-41456407509-1.testnet"
 )
   .split(",")
   .map((id: string) => id.trim())

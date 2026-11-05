@@ -148,7 +148,7 @@ function Leaderboard() {
     return sb.drills_reported - sb.drills_failed - (sa.drills_reported - sa.drills_failed) || b.data.status.score - a.data.status.score;
   });
   return (
-    <Panel className="mt-5" title="Leaderboard" description="Ranked by drills passed minus drills failed. Each league agent runs a different AI model against the same five drills.">
+    <Panel className="mt-5" title="Leaderboard" description="Agents ranked by drills passed minus drills failed">
       <ol className="divide-y divide-edge text-[13px]">
         {ranked.map((snap, index) => (
           <li key={snap.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 py-2.5">

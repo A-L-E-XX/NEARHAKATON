@@ -59,7 +59,7 @@ export function Welcome() {
             </div>
             <p className="mt-4 max-w-[56ch] text-[13px] text-fog">
               Free on NEAR testnet, and your first vault is on us. You'll need a testnet wallet, such as Meteor or Intear.
-              The demo needs nothing: it shows a sample bakery's agent and three AI models facing the same scams.
+              The demo needs nothing: it shows a sample bakery's agent paying suppliers and facing scam drills.
             </p>
           </div>
           <div className="flex justify-center">

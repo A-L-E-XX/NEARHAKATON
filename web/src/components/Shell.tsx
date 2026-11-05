@@ -127,7 +127,7 @@ function DemoBanner() {
       <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p className="text-mist">
           <span className="font-semibold text-water">Demo.</span> You're looking at sample vaults on NEAR testnet: a bakery's
-          agent and three AI models facing the same scams. Everything is live; only their owners can act.
+          agent paying suppliers and facing scam drills, and a test agent that failed one. Everything is live; only their owners can act.
         </p>
         <span className="flex shrink-0 gap-2">
           {account ? (
